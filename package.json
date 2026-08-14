@@ -1,0 +1,19 @@
+{
+  "name": "eliza-ai-bun",
+  "version": "1.0.0",
+  "description": "Incrementally Learning ELIZA-Style CLI LLM Bot built with Bun and TypeScript",
+  "main": "src/index.ts",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

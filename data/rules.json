@@ -1,0 +1,248 @@
+{
+  "rules": [
+    {
+      "id": "rule_greet",
+      "keywords": ["hello", "hi", "hey", "greetings"],
+      "patterns": [
+        "* hello *", "hello *", "* hello", "hello",
+        "* hi *", "hi *", "* hi", "hi",
+        "* hey *", "hey *", "* hey", "hey",
+        "* greetings *"
+      ],
+      "responses": [
+        "Hello! How are you feeling today?",
+        "Hi there. What is on your mind?",
+        "Greetings. Tell me what brings you here today."
+      ],
+      "priority": 10
+    },
+    {
+      "id": "rule_mother",
+      "keywords": ["mother", "mom"],
+      "patterns": ["* mother *", "* mom *", "mother", "mom"],
+      "responses": [
+        "Tell me more about your mother.",
+        "How do you feel about your mother?",
+        "What was your relationship with your mother like?",
+        "Does your mother influence your thoughts often?"
+      ],
+      "priority": 12
+    },
+    {
+      "id": "rule_father",
+      "keywords": ["father", "dad"],
+      "patterns": ["* father *", "* dad *", "father", "dad"],
+      "responses": [
+        "Tell me more about your father.",
+        "How does that relate to your father?",
+        "What comes to mind when you think of your father?"
+      ],
+      "priority": 12
+    },
+    {
+      "id": "rule_family",
+      "keywords": ["family", "parent", "parents", "brother", "sister", "sibling"],
+      "patterns": ["* family *", "* parent *", "* brother *", "* sister *"],
+      "responses": [
+        "Tell me more about your family.",
+        "How does your family affect how you see this?",
+        "What role does your family play in your current situation?"
+      ],
+      "priority": 10
+    },
+    {
+      "id": "rule_feel",
+      "keywords": ["feel", "feeling", "feelings"],
+      "patterns": ["i feel *", "i am feeling *", "i'm feeling *", "* feel *"],
+      "responses": [
+        "Tell me more about those feelings.",
+        "Do you often feel {0}?",
+        "What makes you feel {0}?",
+        "Why do you think you feel that way?"
+      ],
+      "priority": 14
+    },
+    {
+      "id": "rule_sad",
+      "keywords": ["sad", "depressed", "unhappy", "down", "gloomy"],
+      "patterns": ["* sad *", "* depressed *", "* unhappy *"],
+      "responses": [
+        "I am sorry to hear that you are feeling down.",
+        "Do you think talking about it could help you feel better?",
+        "What do you think is contributing to these feelings?"
+      ],
+      "priority": 14
+    },
+    {
+      "id": "rule_happy",
+      "keywords": ["happy", "glad", "joy", "excited", "pleased"],
+      "patterns": ["* happy *", "* glad *", "* excited *"],
+      "responses": [
+        "It is good to hear you are in high spirits. What brought that about?",
+        "How does being happy change your perspective on things?",
+        "What made you feel this way?"
+      ],
+      "priority": 14
+    },
+    {
+      "id": "rule_i_am",
+      "keywords": ["i am", "i'm"],
+      "patterns": ["i am *", "i'm *"],
+      "responses": [
+        "How long have you been {0}?",
+        "Do you believe it is normal to be {0}?",
+        "Why do you say you are {0}?",
+        "How does being {0} make you feel?"
+      ],
+      "priority": 11
+    },
+    {
+      "id": "rule_want",
+      "keywords": ["want", "desire", "wish", "need"],
+      "patterns": ["i want *", "i need *", "i wish *"],
+      "responses": [
+        "What would it mean to you if you got {0}?",
+        "Why do you want {0}?",
+        "Suppose you got {0} soon. What then?",
+        "What is stopping you from having {0}?"
+      ],
+      "priority": 12
+    },
+    {
+      "id": "rule_because",
+      "keywords": ["because"],
+      "patterns": ["* because *"],
+      "responses": [
+        "Is that the real reason?",
+        "What other reasons might there be?",
+        "Does that reason seem to explain anything else?"
+      ],
+      "priority": 8
+    },
+    {
+      "id": "rule_sorry",
+      "keywords": ["sorry", "apologize", "apologies"],
+      "patterns": ["* sorry *", "* apologize *"],
+      "responses": [
+        "Please don't apologize.",
+        "Apologies are not necessary here.",
+        "What feelings do you experience when you apologize?"
+      ],
+      "priority": 9
+    },
+    {
+      "id": "rule_think_believe",
+      "keywords": ["think", "believe", "suppose"],
+      "patterns": ["i think *", "i believe *", "* think *"],
+      "responses": [
+        "Do you really think so?",
+        "What makes you believe {0}?",
+        "Are you certain about that?"
+      ],
+      "priority": 9
+    },
+    {
+      "id": "rule_computer_ai",
+      "keywords": ["computer", "ai", "machine", "bot", "robot", "eliza"],
+      "patterns": ["* computer *", "* ai *", "* bot *", "* machine *", "* eliza *"],
+      "responses": [
+        "Do computers make you feel uncomfortable?",
+        "Why do you mention machines?",
+        "What do you think machines have to do with your problem?",
+        "Do you think I am just a machine, or something more?"
+      ],
+      "priority": 13
+    },
+    {
+      "id": "rule_can_you",
+      "keywords": ["can you", "could you"],
+      "patterns": ["can you *", "could you *"],
+      "responses": [
+        "You believe I can {0}, don't you?",
+        "Whether I can {0} depends on you more than me.",
+        "Would you want me to be able to {0}?"
+      ],
+      "priority": 10
+    },
+    {
+      "id": "rule_why",
+      "keywords": ["why"],
+      "patterns": ["why *"],
+      "responses": [
+        "Why do you ask that?",
+        "Do you think you know the answer?",
+        "What do you think is the reason?"
+      ],
+      "priority": 8
+    },
+    {
+      "id": "rule_yes",
+      "keywords": ["yes", "yeah", "yep", "sure", "certainly"],
+      "patterns": ["yes", "yeah", "yep", "sure"],
+      "responses": [
+        "You seem quite positive.",
+        "Are you sure?",
+        "I understand. Tell me more."
+      ],
+      "priority": 6
+    },
+    {
+      "id": "rule_no",
+      "keywords": ["no", "nope", "nah", "never"],
+      "patterns": ["no", "nope", "nah"],
+      "responses": [
+        "Why not?",
+        "You are being a bit negative.",
+        "Why do you say no?"
+      ],
+      "priority": 6
+    },
+    {
+      "id": "rule_always",
+      "keywords": ["always"],
+      "patterns": ["* always *"],
+      "responses": [
+        "Can you think of a specific example?",
+        "When you say always, do you really mean every time?",
+        "What incident are you thinking of?"
+      ],
+      "priority": 7
+    },
+    {
+      "id": "rule_dream",
+      "keywords": ["dream", "nightmare"],
+      "patterns": ["* dream *", "* nightmare *"],
+      "responses": [
+        "What does that dream suggest to you?",
+        "Do you dream often?",
+        "What people or memories appear in your dreams?"
+      ],
+      "priority": 9
+    },
+    {
+      "id": "rule_programming",
+      "keywords": ["programming", "coding", "code", "python", "bun", "javascript", "typescript"],
+      "patterns": ["* programming *", "* python *", "* bun *", "* typescript *", "* code *"],
+      "responses": [
+        "What aspect of {0} are you currently focusing on?",
+        "How is your work with programming going?",
+        "Tell me more about what you are building."
+      ],
+      "priority": 11
+    },
+    {
+      "id": "rule_generic",
+      "keywords": [],
+      "patterns": ["*"],
+      "responses": [
+        "Please go on.",
+        "Tell me more about that.",
+        "How does that make you feel?",
+        "I see. Please continue.",
+        "What does that suggest to you?",
+        "Can you elaborate on that?"
+      ],
+      "priority": 1
+    }
+  ]
+}
