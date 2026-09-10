@@ -10,6 +10,8 @@ export interface OllamaGenerateOptions {
   temperature?: number;
   format?: "json";
   onToken?: (token: string) => void;
+  /** Per-call timeout override in ms. Falls back to client default. */
+  timeoutMs?: number;
 }
 
 export interface OllamaResponse {
@@ -28,7 +30,7 @@ export class OllamaClient {
   constructor(
     host: string = "http://localhost:11434",
     defaultModel: string = "gemma2",
-    timeoutMs: number = 10000,
+    timeoutMs: number = 60000,
     enabled: boolean = true
   ) {
     this.host = host.replace(/\/+$/, "");
@@ -61,16 +63,17 @@ export class OllamaClient {
       return false;
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(`${this.host}/api/tags`, {
         signal: controller.signal,
       });
-      clearTimeout(timeout);
       return res.ok;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -112,9 +115,10 @@ export class OllamaClient {
 
     const model = options.model || this.defaultModel;
     const isStream = options.stream ?? false;
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const payload: Record<string, any> = {
@@ -191,6 +195,14 @@ export class OllamaClient {
       }
     } catch (err: any) {
       clearTimeout(timer);
+      // AbortError means our timeout fired (or caller aborted).
+      // Surface a clear, actionable message instead of "The operation was aborted."
+      if (err?.name === "AbortError" || /abort|aborted/i.test(err?.message || "")) {
+        throw new Error(
+          `Ollama chat timed out after ${timeoutMs}ms for model "${model}". ` +
+            `The model may still be loading/generating — try a larger OLLAMA_TIMEOUT_MS, a smaller/faster model, or disable background learning (BOT_AUTO_EXTRACTION=false BOT_AUTO_RULES=false).`
+        );
+      }
       throw new Error(`Ollama chat failed: ${err.message}`);
     }
   }

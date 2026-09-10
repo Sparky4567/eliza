@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ELIZA-AI — web chat</title>
+<style>
+  :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#e6edf3; --dim:#8b949e; --acc:#58a6ff; --ok:#3fb950; --warn:#d29922; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.5 system-ui,sans-serif; }
+  header { padding:14px 18px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  header .sub { color:var(--dim); font-size:13px; }
+  #model { font-size:13px; padding:4px 10px; border:1px solid var(--line); border-radius:20px; color:var(--dim); }
+  #status { margin-left:auto; font-size:13px; padding:4px 10px; border:1px solid var(--line); border-radius:20px; }
+  #status .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--warn); margin-right:6px; }
+  #status.live .dot { background:var(--ok); }
+  #status.busy .dot { background:var(--acc); }
+  main { display:grid; grid-template-columns: 320px 1fr; gap:14px; padding:14px 18px; max-width:1100px; margin:0 auto; }
+  @media (max-width:800px){ main{grid-template-columns:1fr;} }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card h2 { margin:0 0 10px; font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); }
+  button, input[type=text] { font:inherit; }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:#1f6feb; border-color:#1f6feb; color:#fff; }
+  button.danger { border-color:#f85149; color:#f85149; }
+  button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .cmds { display:flex; gap:6px; flex-wrap:wrap; }
+  .cmds button { padding:5px 10px; font-size:13px; }
+  #log { height:52vh; min-height:280px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+  .msg { padding:8px 11px; border-radius:8px; background:#0d1117; border:1px solid var(--line); white-space:pre-wrap; word-break:break-word; }
+  .msg.user { border-color:#1f6feb; } .msg.ai { border-color:#3fb950; } .msg.sys { color:var(--dim); font-size:13px; }
+  .msg .who { font-size:12px; color:var(--dim); margin-bottom:2px; }
+  #composer { display:flex; gap:8px; margin-top:10px; }
+  #composer input { flex:1; background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:9px 12px; color:var(--txt); }
+  #ctx, #trace { font-size:13px; color:var(--dim); display:flex; flex-direction:column; gap:6px; max-height:26vh; overflow:auto; }
+  #trace .k { color:var(--txt); }
+  code { background:#0d1117; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 ELIZA-AI</h1><span class="sub">incrementally learning bot · local-first (Ollama + ELIZA rules)</span>
+  <span id="model" title="Active model">…</span>
+  <span id="status"><span class="dot"></span><span id="statusText">connecting…</span></span>
+</header>
+<main>
+  <section class="card">
+    <h2>Backend</h2>
+    <div id="backend" style="font-size:13px;color:var(--dim)">…</div>
+    <h2 style="margin-top:14px">Commands</h2>
+    <div class="cmds" id="cmds">
+      <button data-cmd="/stats">/stats</button>
+      <button data-cmd="/trace">/trace</button>
+      <button data-cmd="/memory">/memory</button>
+      <button data-cmd="/knowledge">/knowledge</button>
+      <button data-cmd="/model">/model</button>
+      <button data-cmd="/help">/help</button>
+    </div>
+    <h2 style="margin-top:14px">Last turn context</h2>
+    <div id="ctx"><span>none yet</span></div>
+    <h2 style="margin-top:14px">Trace</h2>
+    <div id="trace"><span>none yet</span></div>
+  </section>
+  <section class="card">
+    <h2>Conversation</h2>
+    <div id="log"></div>
+    <div id="composer">
+      <input id="textIn" type="text" placeholder="Type a message (or /help for commands)…" autocomplete="off" />
+      <button id="sendBtn" class="primary">Send</button>
+      <button id="stopBtn" class="danger" disabled>⏹ Stop</button>
+    </div>
+  </section>
+</main>
+<script type="module" src="./app.ts"></script>
+</body>
+</html>

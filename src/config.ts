@@ -19,6 +19,9 @@ export interface BotConfig {
     maxRetrievedKnowledge: number;
     maxContextTurns: number;
   };
+  web: {
+    port: number;
+  };
 }
 
 const defaultDataDir = path.resolve(import.meta.dir, "../data");
@@ -30,7 +33,7 @@ export const defaultConfig: BotConfig = {
     host: process.env.OLLAMA_HOST || "http://localhost:11434",
     model: process.env.OLLAMA_MODEL || "",
     enabled: process.env.OLLAMA_ENABLED !== "false",
-    timeoutMs: parseInt(process.env.OLLAMA_TIMEOUT_MS || "10000", 10),
+    timeoutMs: parseInt(process.env.OLLAMA_TIMEOUT_MS || "60000", 10),
     stream: process.env.OLLAMA_STREAM !== "false",
   },
   learning: {
@@ -41,5 +44,8 @@ export const defaultConfig: BotConfig = {
     maxRetrievedMemories: 5,
     maxRetrievedKnowledge: 4,
     maxContextTurns: 10,
+  },
+  web: {
+    port: Number(process.env.ELIZA_WEB_PORT ?? process.env.WEB_PORT ?? process.env.PORT ?? 3000),
   },
 };

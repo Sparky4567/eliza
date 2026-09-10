@@ -7,8 +7,9 @@ import type { MemoryStore } from "../memory/store.ts";
 import type { KnowledgeStore } from "../knowledge/store.ts";
 import type { MemoryRetriever } from "../memory/retrieval.ts";
 import type { KnowledgeRetriever } from "../knowledge/retrieval.ts";
-import type { ResponseEngine } from "./response.ts";
+import type { ResponseEngine, ResponseTrace } from "./response.ts";
 import type { LearningPipeline } from "../knowledge/learning.ts";
+import type { OllamaClient } from "../llm/ollama.ts";
 import type { BotConfig } from "../config.ts";
 
 export class ConversationBot {
@@ -72,6 +73,21 @@ export class ConversationBot {
 
   public getBotDisplayName(): string {
     return `(ELIZA:${this.getActiveModelName()})`;
+  }
+
+  /** Direct access to the underlying LLM client (used by the web server for health/model info). */
+  public getLLM(): OllamaClient {
+    return this.responseEngine.getLLM();
+  }
+
+  /** Database/learning statistics snapshot (used by CLI /stats and the web server). */
+  public getStats(): ReturnType<BotDatabase["getStats"]> {
+    return this.db.getStats();
+  }
+
+  /** Full execution trace of the most recent turn (used by CLI /trace and the web server). */
+  public getLastTrace(): ResponseTrace | null {
+    return this.responseEngine.getLastTrace();
   }
 
   private createSession(): string {
@@ -145,15 +161,23 @@ export class ConversationBot {
     // 4. Record assistant message
     this.recordMessage("assistant", result.response, result.strategy);
 
-    // 5. Incremental Learning (Post-turn)
-    if (this.config.learning.autoExtraction) {
-      const historyStr = history.slice(-4).map((h) => `${h.role}: ${h.content}`).join("\n");
-      await this.learningPipeline.extractWithLLM(trimmed, result.response, historyStr);
+    // 5. Incremental Learning (Post-turn, best-effort — must never break the reply)
+    try {
+      if (this.config.learning.autoExtraction) {
+        const historyStr = history.slice(-4).map((h) => `${h.role}: ${h.content}`).join("\n");
+        await this.learningPipeline.extractWithLLM(trimmed, result.response, historyStr);
+      }
+    } catch (err: any) {
+      console.warn(`[learning] Post-turn extraction failed (reply unaffected): ${err?.message || err}`);
     }
 
-    if (this.config.learning.autoCandidateRules) {
-      const historyStr = history.slice(-4).map((h) => `${h.role}: ${h.content}`).join("\n");
-      await this.learningPipeline.proposeCandidateRule(trimmed, historyStr);
+    try {
+      if (this.config.learning.autoCandidateRules) {
+        const historyStr = history.slice(-4).map((h) => `${h.role}: ${h.content}`).join("\n");
+        await this.learningPipeline.proposeCandidateRule(trimmed, historyStr);
+      }
+    } catch (err: any) {
+      console.warn(`[learning] Candidate-rule proposal failed (reply unaffected): ${err?.message || err}`);
     }
 
     return { response: result.response, isCommand: false, trace: result.trace };
@@ -415,9 +439,23 @@ Candidate Rules:    ${stats.candidateRules}
     console.log("=======================================================");
     console.log("Type your message or /help for commands, /quit to exit.\n");
 
+    const isAbortError = (err: any) =>
+      err?.code === "ABORT_ERR" || err?.name === "AbortError" || /aborted with ctrl\+c|aborted/i.test(err?.message || "");
+
     try {
       while (this.isRunning) {
-        const userText = await rl.question("\x1b[36mYou:\x1b[0m ");
+        let userText: string;
+        try {
+          userText = await rl.question("\x1b[36mYou:\x1b[0m ");
+        } catch (err: any) {
+          // Ctrl+C in Bun's readline rejects with ABORT_ERR — exit gracefully, don't crash.
+          if (isAbortError(err)) {
+            console.log("\nGoodbye.");
+            this.isRunning = false;
+            break;
+          }
+          throw err;
+        }
         if (!this.isRunning) break;
 
         const trimmed = userText.trim();
@@ -433,18 +471,28 @@ Candidate Rules:    ${stats.candidateRules}
         process.stdout.write(`\x1b[32m${this.getBotDisplayName()}:\x1b[0m `);
         let streamed = false;
 
-        const { response } = await this.handleInput(trimmed, {
-          stream: true,
-          onToken: (token) => {
-            streamed = true;
-            process.stdout.write(token);
-          },
-        });
+        try {
+          const { response } = await this.handleInput(trimmed, {
+            stream: true,
+            onToken: (token) => {
+              streamed = true;
+              process.stdout.write(token);
+            },
+          });
 
-        if (!streamed) {
-          process.stdout.write(response);
+          if (!streamed) {
+            process.stdout.write(response);
+          }
+          console.log("\n");
+        } catch (err: any) {
+          // A failed/slow LLM call (e.g. timeout abort) must not kill the REPL.
+          // The response engine already falls back to ELIZA; this is a last-resort guard.
+          if (isAbortError(err)) {
+            console.log(`\n[warn] Request aborted/timed out — reply skipped, continuing. (${err.message})`);
+            continue;
+          }
+          console.log(`\n[warn] Turn failed but session continues: ${err?.message || err}`);
         }
-        console.log("\n");
       }
     } finally {
       rl.close();

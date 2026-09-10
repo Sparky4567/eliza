@@ -19,6 +19,7 @@ export function createBot(customConfig: Partial<BotConfig> = {}): ConversationBo
     ...customConfig,
     ollama: { ...defaultConfig.ollama, ...(customConfig.ollama || {}) },
     learning: { ...defaultConfig.learning, ...(customConfig.learning || {}) },
+    web: { ...defaultConfig.web, ...(customConfig.web || {}) },
   };
 
   const db = new BotDatabase(config.dbPath);
@@ -53,8 +54,51 @@ export function createBot(customConfig: Partial<BotConfig> = {}): ConversationBo
   );
 }
 
-// Entrypoint
-if (import.meta.main) {
+export interface CliOptions {
+  web: boolean;
+  port?: number;
+}
+
+/**
+ * Parses CLI flags. Supports:
+ *   bun run src/index.ts [--web] [--port 3000 | --port=3000]
+ * Env fallback for the port: ELIZA_WEB_PORT / WEB_PORT / PORT (see config.ts).
+ */
+export function parseCliArgs(argv: string[] = process.argv.slice(2)): CliOptions {
+  let web = false;
+  let port: number | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === "--web") {
+      web = true;
+    } else if (arg === "--port" && argv[i + 1]) {
+      const n = Number(argv[++i]);
+      if (Number.isFinite(n) && n > 0) port = n;
+    } else if (arg.startsWith("--port=")) {
+      const n = Number(arg.slice("--port=".length));
+      if (Number.isFinite(n) && n > 0) port = n;
+    }
+  }
+
+  return { web, port };
+}
+
+/** Entrypoint: CLI REPL by default, web UI + API with --web (like zap's server mode). */
+export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+  const opts = parseCliArgs(argv);
+  if (opts.web) {
+    const port = opts.port ?? defaultConfig.web.port;
+    const bot = createBot({ web: { port } });
+    const { startWebServer } = await import("./web/server.ts");
+    await startWebServer(bot, { port });
+    return;
+  }
   const bot = createBot();
   await bot.startCLI();
+}
+
+// Entrypoint
+if (import.meta.main) {
+  await main();
 }

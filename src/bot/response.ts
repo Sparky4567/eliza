@@ -103,8 +103,8 @@ export class ResponseEngine {
         });
         responseText = genRes.content.trim();
         modelName = genRes.model;
-      } catch (err) {
-        console.error("LLM Generation error, falling back to ELIZA:", err);
+      } catch (err: any) {
+        console.warn(`[llm] Generation failed, falling back to ELIZA: ${err?.message || err}`);
         strategy = "eliza_fallback";
       }
     }

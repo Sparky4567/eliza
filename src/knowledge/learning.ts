@@ -139,6 +139,7 @@ export class LearningPipeline {
       return result;
     }
 
+    let rawContent: string;
     try {
       const prompt = `${MEMORY_EXTRACTION_PROMPT}
 
@@ -156,9 +157,27 @@ ${assistantResponse}`;
         format: "json",
         temperature: 0.1,
       });
+      rawContent = response.content;
+    } catch (err: any) {
+      // Background learning must never crash or spam a stack trace.
+      // Timeouts/aborts are expected with slow local models — heuristics above already ran.
+      if (/timed out|abort/i.test(err?.message || "")) {
+        console.warn(`[learning] Skipping LLM extraction (${err.message.split(".")[0]}). Heuristic result kept.`);
+      } else {
+        console.warn(`[learning] LLM extraction skipped: ${err?.message || err}`);
+      }
+      return result;
+    }
 
-      const parsed = JSON.parse(response.content);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(rawContent!);
+    } catch {
+      // Malformed JSON from model — ignore, heuristics already applied.
+      return result;
+    }
 
+    try {
       // Process memories
       if (Array.isArray(parsed.memories)) {
         for (const item of parsed.memories) {
@@ -219,9 +238,9 @@ ${assistantResponse}`;
           }
         }
       }
-    } catch (err) {
-      // In case of JSON parsing or LLM failure, don't crash
-      console.error("Learning pipeline LLM extraction error:", err);
+    } catch (err: any) {
+      // Storage failures etc. — never crash the chat loop.
+      console.warn(`[learning] Failed to store extraction: ${err?.message || err}`);
     }
 
     return result;
