@@ -278,7 +278,8 @@ tests/
 └── web.test.ts             # Web server: flags, REST parity, WS streaming
 public/
 ├── index.html              # Web chat UI shell
-└── app.ts                  # WS streaming client, command buttons, trace panel
+├── app.ts                  # WS streaming client, command buttons, trace panel
+└── markdown.ts             # Zero-dep XSS-safe markdown + :emoji: renderer
 ```
 
 ---

@@ -13,6 +13,14 @@
   header .sub { color:var(--dim); font-size:13px; }
   #model { font-size:13px; padding:4px 10px; border:1px solid var(--line); border-radius:20px; color:var(--dim); }
   #status { margin-left:auto; font-size:13px; padding:4px 10px; border:1px solid var(--line); border-radius:20px; }
+  #focusBtn { padding:5px 12px; font-size:13px; }
+  #focusBtn[aria-pressed="true"] { border-color:var(--acc); color:var(--acc); }
+  /* Distraction-free mode: side panel hides, chat fills the whole viewport */
+  body.focus { height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  body.focus main { flex:1; min-height:0; width:100%; max-width:none; grid-template-columns:1fr; }
+  body.focus #side { display:none; }
+  body.focus #chat { display:flex; flex-direction:column; min-height:0; }
+  body.focus #log { flex:1; height:auto; min-height:0; }
   #status .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--warn); margin-right:6px; }
   #status.live .dot { background:var(--ok); }
   #status.busy .dot { background:var(--acc); }
@@ -38,16 +46,40 @@
   #ctx, #trace { font-size:13px; color:var(--dim); display:flex; flex-direction:column; gap:6px; max-height:26vh; overflow:auto; }
   #trace .k { color:var(--txt); }
   code { background:#0d1117; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:12px; }
+  /* Rendered markdown inside AI messages */
+  .msg .body.md { white-space:normal; }
+  .msg .body.md p { margin:0 0 8px; } .msg .body.md p:last-child { margin-bottom:0; }
+  .msg .body.md h1, .msg .body.md h2, .msg .body.md h3, .msg .body.md h4 { margin:10px 0 6px; line-height:1.3; }
+  .msg .body.md h1 { font-size:17px; } .msg .body.md h2 { font-size:16px; }
+  .msg .body.md h3 { font-size:15px; } .msg .body.md h4 { font-size:14px; color:var(--dim); }
+  .msg .body.md ul, .msg .body.md ol { margin:4px 0 8px; padding-left:22px; }
+  .msg .body.md li { margin:2px 0; } .msg .body.md li input[type=checkbox] { margin-right:6px; }
+  .msg .body.md a { color:var(--acc); }
+  .msg .body.md blockquote { margin:6px 0; padding:6px 10px; border-left:3px solid var(--acc); background:#0d1117; border-radius:0 6px 6px 0; color:var(--dim); }
+  .msg .body.md blockquote p { margin:0; }
+  .msg .body.md hr { border:none; border-top:1px solid var(--line); margin:10px 0; }
+  .msg .body.md code { padding:1px 5px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .msg .body.md .codeblock { margin:8px 0; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .msg .body.md .code-head { display:flex; justify-content:space-between; align-items:center; padding:3px 8px; background:#010409; border-bottom:1px solid var(--line); font-size:12px; color:var(--dim); }
+  .msg .body.md .code-head .copy-btn { padding:2px 8px; font-size:12px; }
+  .msg .body.md pre { margin:0; padding:10px 12px; overflow:auto; background:#010409; }
+  .msg .body.md pre code { background:none; border:none; padding:0; font-size:12.5px; display:block; white-space:pre; }
+  .msg .body.md .table-wrap { overflow:auto; margin:8px 0; }
+  .msg .body.md table { border-collapse:collapse; width:100%; font-size:13px; }
+  .msg .body.md th, .msg .body.md td { border:1px solid var(--line); padding:5px 9px; text-align:left; }
+  .msg .body.md th { background:#010409; }
+  .msg .body.md img { max-width:100%; border-radius:6px; }
 </style>
 </head>
 <body>
 <header>
   <h1>🤖 ELIZA-AI</h1><span class="sub">incrementally learning bot · local-first (Ollama + ELIZA rules)</span>
   <span id="model" title="Active model">…</span>
+  <button id="focusBtn" aria-pressed="false" title="Hide the side panel and stretch the chat to fill the viewport">⛶ Focus</button>
   <span id="status"><span class="dot"></span><span id="statusText">connecting…</span></span>
 </header>
 <main>
-  <section class="card">
+  <section class="card" id="side">
     <h2>Backend</h2>
     <div id="backend" style="font-size:13px;color:var(--dim)">…</div>
     <h2 style="margin-top:14px">Commands</h2>
@@ -64,7 +96,7 @@
     <h2 style="margin-top:14px">Trace</h2>
     <div id="trace"><span>none yet</span></div>
   </section>
-  <section class="card">
+  <section class="card" id="chat">
     <h2>Conversation</h2>
     <div id="log"></div>
     <div id="composer">
