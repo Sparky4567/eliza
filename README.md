@@ -207,6 +207,7 @@ You: /memory
 | `OLLAMA_MODEL` | _(auto-detect)_ | Ollama model for generation/extraction; empty means use the first available local model. |
 | `OLLAMA_ENABLED` | `true` | Set to `false` to disable LLM and run strictly in deterministic ELIZA mode. |
 | `OLLAMA_TIMEOUT_MS` | `60000` | Timeout in milliseconds for Ollama requests. |
+| `OLLAMA_STREAM` | `true` | Set to `false` to disable token streaming (return full replies at once). |
 | `BOT_AUTO_EXTRACTION` | `true` | Enables post-turn extraction of memories and corrections. |
 | `BOT_AUTO_EVALUATION`| `true` | Enables post-turn response evaluation and strategy scoring. |
 | `BOT_AUTO_RULES` | `true` | Enables candidate rule proposals from conversational patterns. |
@@ -238,6 +239,7 @@ composer works like the CLI.
 ## 📂 Project Structure
 
 ```text
+index.ts                   # Root re-export + Bun entrypoint (delegates to src/index.ts)
 src/
 ├── index.ts                # Application entrypoint, createBot() factory, --web/--port parsing
 ├── config.ts               # Configuration settings and environment defaults
@@ -275,7 +277,11 @@ tests/
 ├── context.test.ts         # Context assembly tests
 ├── conversation.test.ts    # End-to-end bot interaction and acceptance tests
 ├── integration.test.ts     # Edge cases, life-cycle, and statistics tests
+├── markdown.test.ts        # XSS-safe markdown + emoji renderer tests
 └── web.test.ts             # Web server: flags, REST parity, WS streaming
+data/
+├── rules.json              # 21 seeded ELIZA pattern rules (priority-ranked)
+└── bot.db*                 # Local SQLite DB (gitignored — created on first run)
 public/
 ├── index.html              # Web chat UI shell
 ├── app.ts                  # WS streaming client, command buttons, trace panel
@@ -286,7 +292,41 @@ public/
 
 ## 🧪 Testing
 
-Run all 33 automated tests:
+Run all 41 automated tests (9 files):
 ```bash
 bun test
 ```
+
+Expected output: `41 pass, 0 fail` (`165 expect() calls`).
+
+---
+
+## 🖥️ CLI Flags
+
+```bash
+bun start                          # CLI REPL (default)
+bun run web                        # Web UI on default port (3000)
+bun run src/index.ts --web --port 3000        # Explicit port
+bun run src/index.ts --web --port=3000        # Alternate form
+```
+
+Port resolution order: `--port` flag → `ELIZA_WEB_PORT` → `WEB_PORT` → `PORT` → `3000`.
+Database/rules paths can be overridden per-run, e.g. `BOT_DB_PATH=:memory: bun test`
+for an isolated in-memory DB.
+
+---
+
+## 📝 Notes
+
+- `data/bot.db*` (SQLite + WAL/SHM) is local runtime state and is gitignored —
+  it is created on first run. Delete it to reset sessions, memories, and knowledge.
+- `data/rules.json` ships 21 seeded ELIZA rules; learned candidates stay in the DB
+  until approved via `/approve <id>`.
+- Offline-first: with Ollama down (or `OLLAMA_ENABLED=false`) the bot keeps working
+  via the deterministic rule engine as `(ELIZA:rules)`.
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](./LICENSE).
