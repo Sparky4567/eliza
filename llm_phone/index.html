@@ -2,19 +2,91 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="description" content="Phone-LLM Companion — chat with a remote Ollama server from your phone.">
   <title>Phone‑LLM Companion</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>📱 LLM Companion</h1>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">📱</span>
+        <div>
+          <h1>LLM Companion</h1>
+          <p class="subtitle"><span id="statusDot" class="status-dot" title="Not tested"></span><span id="statusText">Not connected — check settings</span></p>
+        </div>
+      </div>
+      <button id="settingsToggle" class="icon-btn" aria-expanded="false" aria-controls="settingsPanel" title="Settings">
+        ⚙️ <span class="icon-btn-label">Settings</span>
+      </button>
+    </header>
 
-  <textarea id="prompt" rows="4" placeholder="Type a question or command…"></textarea>
-  <br>
-  <button id="sendBtn">Send (or speak)</button>
-  <button id="voiceBtn">🎤 Voice</button>
-  <button id="camBtn">📷 Photo</button>
+    <main>
+      <section id="settingsPanel" class="card settings" hidden>
+        <h2>Connection settings</h2>
+        <p class="hint">Stored locally in your browser (localStorage). No server needed.</p>
 
-  <pre id="output"></pre>
+        <label class="field">
+          <span class="field-label">Remote Ollama host</span>
+          <input id="hostInput" type="url" inputmode="url" placeholder="http://192.168.1.10:11434" autocomplete="url" spellcheck="false">
+          <span class="field-hint">Base URL without trailing <code>/api/…</code>. Example: <code>http://localhost:11434</code></span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Ollama model</span>
+          <div class="model-row">
+            <input id="modelInput" type="text" list="modelList" placeholder="e.g. gpt-oss:120b-cloud" autocomplete="off" spellcheck="false">
+            <button id="refreshModelsBtn" type="button" class="btn secondary" title="Fetch available models from host">↻</button>
+          </div>
+          <datalist id="modelList"></datalist>
+          <span class="field-hint">Type a name or press ↻ to list models from the host.</span>
+        </label>
+
+        <div class="settings-actions">
+          <button id="saveSettingsBtn" class="btn primary">💾 Save settings</button>
+          <button id="testConnectionBtn" type="button" class="btn secondary">Test connection</button>
+          <button id="resetSettingsBtn" type="button" class="btn ghost">Reset</button>
+        </div>
+        <p id="settingsMsg" class="settings-msg" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card chat">
+        <label class="field" for="prompt">
+          <span class="field-label">Prompt</span>
+          <textarea id="prompt" rows="4" placeholder="Type a question or command… (Ctrl+Enter to send)"></textarea>
+        </label>
+
+        <div class="toolbar">
+          <button id="sendBtn" class="btn primary">➤ Send</button>
+          <button id="stopBtn" class="btn secondary" disabled>■ Stop</button>
+          <button id="voiceBtn" class="btn secondary">🎤 Voice</button>
+          <button id="camBtn" class="btn secondary">📷 Photo</button>
+          <button id="clearBtn" class="btn ghost">Clear</button>
+        </div>
+
+        <div class="output-wrap">
+          <div class="output-head">
+            <span>Response</span>
+            <div class="output-controls">
+              <div class="segmented" role="tablist" aria-label="Response view">
+                <button id="viewRenderedBtn" class="seg-btn active" role="tab" aria-selected="true" type="button">Rendered</button>
+                <button id="viewRawBtn" class="seg-btn" role="tab" aria-selected="false" type="button">Raw</button>
+              </div>
+              <button id="copyBtn" class="mini-btn" type="button" title="Copy raw response">⧉ Copy</button>
+              <label class="speak-toggle"><input type="checkbox" id="speakToggle"> 🔊 Speak</label>
+            </div>
+          </div>
+          <div id="output" class="md" aria-live="polite"><span class="placeholder">Your answer will stream here…</span></div>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <small>Streams from <code>/api/generate</code> · Works best in Chrome / Safari on mobile</small>
+      </footer>
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>
