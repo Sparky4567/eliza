@@ -6,7 +6,8 @@ export type KnowledgeCategory =
   | "projects"
   | "concept"
   | "procedure"
-  | "definition";
+  | "definition"
+  | "writing";
 
 export type KnowledgeSourceType = "user" | "model" | "external" | "derived";
 

@@ -179,6 +179,43 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
           return Response.json({ output });
         },
       },
+      "/api/writing": {
+        GET: async (req: Request) => {
+          const url = new URL(req.url);
+          const action = url.searchParams.get("action") ?? "status";
+          const arg = url.searchParams.get("q") ?? url.searchParams.get("arg") ?? "";
+          const cmd =
+            action === "list" ? `/smart-writing list ${arg}`.trim()
+            : action === "show" ? `/smart-writing show`
+            : action === "status" ? `/smart-writing status`
+            : action === "links" ? `/smart-writing links ${arg}`.trim()
+            : `/smart-writing status`;
+          const output = await bot.handleCommand(cmd);
+          const w = bot.getWriting();
+          return Response.json({
+            output,
+            active: w.isActive(),
+            title: w.getTitle(),
+            draft: w.getDraft(),
+          });
+        },
+        POST: async (req: Request) => {
+          const body = await readJson(req);
+          const action = String(body.action ?? "continue");
+          const text = String(body.text ?? body.arg ?? "").slice(0, 8000);
+          const allowed = new Set(["start", "add", "continue", "improve", "show", "status", "save", "list", "links", "done", "cancel"]);
+          if (!allowed.has(action)) {
+            return Response.json({ error: `unknown writing action '${action}'` }, { status: 400 });
+          }
+          try {
+            const output = await bot.handleCommand(`/smart-writing ${action} ${text}`.trim());
+            const w = bot.getWriting();
+            return Response.json({ output, active: w.isActive(), title: w.getTitle(), draft: w.getDraft() });
+          } catch (e: any) {
+            return Response.json({ error: String(e?.message ?? e) }, { status: 500 });
+          }
+        },
+      },
     },
     fetch(req, server) {
       const url = new URL(req.url);

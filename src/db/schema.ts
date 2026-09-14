@@ -82,4 +82,20 @@ CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_knowledge_status ON knowledge(status);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_learned_rules_status ON learned_rules(status);
+
+-- Smart-writing association graph: links a saved story/memory to related
+-- memories or knowledge entries, forming new associations over time.
+CREATE TABLE IF NOT EXISTS memory_links (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'memory',
+  target_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL DEFAULT 'memory',
+  relation TEXT NOT NULL DEFAULT 'related',
+  strength REAL NOT NULL DEFAULT 0.5,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_links_source ON memory_links(source_id);
+CREATE INDEX IF NOT EXISTS idx_memory_links_target ON memory_links(target_id);
 `;

@@ -19,6 +19,7 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 - **Observability & Diagnostics**: Interactive inspection via `/trace`, `/model`, `/stats`, `/memory`, `/knowledge`, `/rules`, and `/approve`.
 - **Web UI + API (`--web`)**: Browser chat with live token streaming over WebSocket, command buttons, and a context/trace side panel — plus a REST API (`/api/chat`, `/api/stats`, `/api/trace`, `/api/model`, …) with full CLI parity.
 - **Resilient LLM Layer**: Clear timeout errors (no more cryptic `The operation was aborted`), best-effort background learning that never breaks a reply, graceful ELIZA fallback, and a Ctrl+C-safe CLI loop.
+- **Smart Writing / Smart Notes (Ollama-only)**: `/smart-writing start …` opens a co-writing session — type multi-sentence / multi-line drafts and the bot continues or improves them until the story is done, then `/smart-writing save` persists it as a `story` memory + `writing` knowledge entry with 🔗 `memory_links` associations to related memories/knowledge.
 
 ---
 
@@ -107,8 +108,9 @@ bun run src/index.ts --web --port 3000
 ```
 Opens a browser chat UI at `http://localhost:3000` with live token streaming
 over WebSocket, the same slash commands as the CLI (`/help`, `/stats`,
-`/trace`, `/memory`, …), plus a context/trace side panel. REST + WS API below.
+`/trace`, `/memory`, …, `/smart-writing …`), plus a context/trace side panel. REST + WS API below.
 Port fallback: `--port` flag, else `ELIZA_WEB_PORT` / `WEB_PORT` / `PORT` env.
+Composer: `Enter` sends, `Shift+Enter` inserts a newline (multi-line stories).
 
 ### 4. Run the Test Suite
 ```bash
@@ -175,6 +177,50 @@ You: /memory
 
 ---
 
+## ✍️ Smart Writing (Ollama-only co-writing + smart notes)
+
+Requires a local Ollama model (`ollama serve` + a pulled model, `OLLAMA_ENABLED=true`).
+Without it, `/smart-writing start|continue|improve` explain that Ollama is needed;
+drafting commands (`show`, `status`, `list`, `save`) keep working offline.
+
+```text
+You: /smart-writing start Mara kept the lighthouse burning through the storm.
+Bot: ✍️ Smart-writing session started… Draft so far (8 words)…
+
+You: She heard a knock at the iron door. The sea was angry and black.
+Bot: <continuation streamed token-by-token, then appended to the draft>
+
+You: /smart-writing improve make it more atmospheric
+Bot: <polished rewrite of the full draft>
+
+You: /smart-writing save The Lighthouse
+Bot: 💾 Saved story "The Lighthouse" as [mem_…] (…words).
+     Knowledge: [kn_…] "Story: The Lighthouse" (v1)
+     🔗 Formed 2 new association(s):
+       - (related) → [memory] [fact] Mara is the lighthouse keeper…
+       - (related) → [knowledge] 📚 Storm…
+
+You: /smart-writing list
+     📚 Saved stories (1): [mem_…] Story "The Lighthouse"…
+
+You: /smart-writing done
+```
+
+Notes:
+- While a session is ACTIVE, plain chat text is story input (appended, then
+  continued automatically). Use `/smart-writing add <text>` to append silently.
+- Multi-line works: paste paragraphs in the CLI; in the web composer use
+  `Shift+Enter` for a newline (`Enter` sends, up to 4000 chars per message,
+  8000 via `POST /api/writing`).
+- `save` stores a `story` memory + a versioned `writing` knowledge entry and
+  links them to related memories/knowledge in the `memory_links` table —
+  inspect with `/smart-writing links <story_id>`.
+- Aliases: `/smart-write`, `/write`, `/story`. Full reference:
+  `/smart-writing help`. Web parity: same commands over WS/REST plus
+  `GET|POST /api/writing`.
+
+---
+
 ## 💬 Slash Commands
 
 | Command | Arguments | Description |
@@ -192,6 +238,7 @@ You: /memory
 | `/rules` | `[status]` | Lists ELIZA rules (`approved`, `candidate`, `rejected`, `all`). |
 | `/approve` | `<id>` | Approves a learned candidate rule and activates it in the ELIZA engine. |
 | `/reload` | — | Reloads rule definitions from `data/rules.json` and database. |
+| `/smart-writing` | `start · add · continue · improve · show · save · list · links · done` | Ollama-only co-writing session: iterative continuation/improvement + persistent save with memory linking (aliases: `/smart-write`, `/write`, `/story`). |
 | `/clear` | — | Clears current conversation history and starts a new session. |
 | `/quit`, `/exit` | — | Exits the conversation cleanly. |
 
@@ -228,6 +275,7 @@ Same bot, browser-hosted — modeled on zap's `Bun.serve` + WebSocket server:
 | Stats / Trace | `GET /api/stats`, `GET /api/trace` | Same data as CLI `/stats`, `/trace` |
 | Model | `GET /api/model`, `POST /api/model {"name"}` | Inspect / switch the active Ollama model |
 | Memory / Knowledge | `GET /api/memory?q=`, `GET /api/knowledge?q=` | Same output as CLI `/memory`, `/knowledge` |
+| Writing | `GET /api/writing?action=status\|show\|list\|links`, `POST /api/writing {"action","text"}` | Smart-writing session state, saved-story library, and association graph |
 
 WS protocol (`/ws`, JSON): client→server `text {text}` · `stop`; server→client
 `ready` · `llm-token` · `llm-done {text, isCommand, trace}` · `turn-end` ·
@@ -263,12 +311,14 @@ src/
 │   └── learning.ts         # Heuristic and LLM-powered extraction pipeline
 ├── llm/
 │   ├── ollama.ts           # Streaming HTTP client for Ollama
-│   └── prompts.ts          # Persona, extraction, evaluation & rule prompts
-└── bot/
-    ├── context.ts          # Context builder assembling memories, knowledge & history
-    ├── evaluator.ts        # Response evaluator & strategy performance tracker
-    ├── response.ts         # Response engine orchestrating ELIZA rules vs. LLM streaming
-    └── conversation.ts     # CLI REPL loop & slash command dispatcher
+│   └── prompts.ts          # Persona, extraction, evaluation, rule & smart-writing prompts
+├── writing/
+│   └── smart-writing.ts    # Ollama-gated co-writing sessions + story save with memory_links
+├── bot/
+│   ├── context.ts          # Context builder assembling memories, knowledge & history
+│   ├── evaluator.ts        # Response evaluator & strategy performance tracker
+│   ├── response.ts         # Response engine orchestrating ELIZA rules vs. LLM streaming
+│   └── conversation.ts     # CLI REPL loop & slash command dispatcher
 tests/
 ├── eliza.test.ts           # Pattern matching, reflection & candidate rules tests
 ├── memory.test.ts          # Memory storage, deduplication & contradiction tests
@@ -278,7 +328,8 @@ tests/
 ├── conversation.test.ts    # End-to-end bot interaction and acceptance tests
 ├── integration.test.ts     # Edge cases, life-cycle, and statistics tests
 ├── markdown.test.ts        # XSS-safe markdown + emoji renderer tests
-└── web.test.ts             # Web server: flags, REST parity, WS streaming
+├── web.test.ts             # Web server: flags, REST parity, WS streaming
+└── writing.test.ts         # Smart-writing: Ollama gating, draft/save/links, web parity
 data/
 ├── rules.json              # 21 seeded ELIZA pattern rules (priority-ranked)
 └── bot.db*                 # Local SQLite DB (gitignored — created on first run)
@@ -292,12 +343,12 @@ public/
 
 ## 🧪 Testing
 
-Run all 41 automated tests (9 files):
+Run all 49 automated tests (10 files):
 ```bash
 bun test
 ```
 
-Expected output: `41 pass, 0 fail` (`165 expect() calls`).
+Expected output: `49 pass, 0 fail` (`199 expect() calls`).
 
 ---
 

@@ -7,7 +7,7 @@ const $ = (id: string) => document.getElementById(id)!;
 const logEl = $("log"), statusEl = $("status"), statusText = $("statusText"),
   modelEl = $("model"), backendEl = $("backend"),
   ctxEl = $("ctx"), traceEl = $("trace"),
-  textIn = $("textIn") as HTMLInputElement,
+  textIn = $("textIn") as HTMLTextAreaElement,
   sendBtn = $("sendBtn") as HTMLButtonElement,
   stopBtn = $("stopBtn") as HTMLButtonElement,
   focusBtn = $("focusBtn") as HTMLButtonElement;
@@ -236,7 +236,13 @@ function sendCurrent(cmd?: string) {
 }
 
 sendBtn.onclick = () => sendCurrent();
-textIn.onkeydown = (e) => { if (e.key === "Enter") sendCurrent(); };
+textIn.onkeydown = (e) => {
+  // Enter sends; Shift+Enter inserts a newline (multi-line stories/notes).
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendCurrent();
+  }
+};
 stopBtn.onclick = () => {
   ws?.send(JSON.stringify({ type: "stop" }));
   busy = false;

@@ -11,6 +11,7 @@ import type { ResponseEngine, ResponseTrace } from "./response.ts";
 import type { LearningPipeline } from "../knowledge/learning.ts";
 import type { OllamaClient } from "../llm/ollama.ts";
 import type { BotConfig } from "../config.ts";
+import { SmartWritingManager } from "../writing/smart-writing.ts";
 
 export class ConversationBot {
   private db: BotDatabase;
@@ -22,6 +23,7 @@ export class ConversationBot {
   private knowledgeRetriever: KnowledgeRetriever;
   private responseEngine: ResponseEngine;
   private learningPipeline: LearningPipeline;
+  private writing: SmartWritingManager;
   private config: BotConfig;
   private sessionId: string;
   private isRunning: boolean = false;
@@ -36,7 +38,8 @@ export class ConversationBot {
     knowledgeRetriever: KnowledgeRetriever,
     responseEngine: ResponseEngine,
     learningPipeline: LearningPipeline,
-    config: BotConfig
+    config: BotConfig,
+    writing: SmartWritingManager
   ) {
     this.db = db;
     this.ruleRegistry = ruleRegistry;
@@ -47,6 +50,7 @@ export class ConversationBot {
     this.knowledgeRetriever = knowledgeRetriever;
     this.responseEngine = responseEngine;
     this.learningPipeline = learningPipeline;
+    this.writing = writing;
     this.config = config;
     this.sessionId = this.createSession();
   }
@@ -88,6 +92,11 @@ export class ConversationBot {
   /** Full execution trace of the most recent turn (used by CLI /trace and the web server). */
   public getLastTrace(): ResponseTrace | null {
     return this.responseEngine.getLastTrace();
+  }
+
+  /** Smart-writing co-authoring manager (Ollama-gated). */
+  public getWriting(): SmartWritingManager {
+    return this.writing;
   }
 
   private createSession(): string {
@@ -142,10 +151,29 @@ export class ConversationBot {
       return { response: "Please say something.", isCommand: false };
     }
 
-    // 1. Slash commands
+    // 1. Slash commands (streaming-aware for smart-writing generations)
     if (trimmed.startsWith("/")) {
-      const commandResult = await this.handleCommand(trimmed);
+      const commandResult = await this.handleCommand(trimmed, options);
       return { response: commandResult, isCommand: true };
+    }
+
+    // 1b. Smart-writing session hijack: while ACTIVE, plain chat text is
+    // story input — append it and auto-continue via Ollama (streams).
+    // If the LLM is unreachable, the text is still kept in the draft.
+    if (this.writing.isActive()) {
+      this.recordMessage("user", trimmed);
+      const appendNote = this.writing.addText(trimmed);
+      const continuation = await this.writing.continueDraft({
+        onToken: options.onToken,
+        stream: options.stream,
+      });
+      if (continuation.startsWith("✍️ Smart writing requires") || continuation.startsWith("⚠️")) {
+        const offlineReply = `${appendNote}\n\n${continuation}\n(Your lines are saved in the draft — /smart-writing show to view, /smart-writing save to persist.)`;
+        this.recordMessage("assistant", offlineReply, "smart_writing_append_offline");
+        return { response: offlineReply, isCommand: false };
+      }
+      this.recordMessage("assistant", continuation, "smart_writing_continue");
+      return { response: continuation, isCommand: false };
     }
 
     // 2. Record user message
@@ -186,7 +214,10 @@ export class ConversationBot {
   /**
    * Dispatches CLI slash commands.
    */
-  public async handleCommand(cmdText: string): Promise<string> {
+  public async handleCommand(
+    cmdText: string,
+    options: { onToken?: (token: string) => void; stream?: boolean } = {}
+  ): Promise<string> {
     const parts = cmdText.split(" ");
     const cmd = parts[0]!.toLowerCase();
     const arg = parts.slice(1).join(" ").trim();
@@ -210,6 +241,7 @@ export class ConversationBot {
   /approve <id>       Approve a candidate rule to activate it
   /trace              Inspect full execution trace of the last turn
   /reload             Reload rules from JSON file and database
+  /smart-writing ...  Co-write stories with Ollama (Ollama-only, see /smart-writing help)
 `.trim();
 
       case "/model": {
@@ -420,8 +452,125 @@ Candidate Rules:    ${stats.candidateRules}
         return "Rules reloaded successfully.";
       }
 
+      case "/smart-writing":
+      case "/smart-write":
+      case "/write":
+      case "/story": {
+        return await this.handleSmartWriting(arg, options);
+      }
+
       default:
         return `Unknown command "${cmd}". Type /help for available commands.`;
+    }
+  }
+
+  /**
+   * Dispatches /smart-writing subcommands (Ollama-gated co-writing).
+   * Plain-text story typing while a session is ACTIVE is handled in handleInput().
+   */
+  private async handleSmartWriting(
+    arg: string,
+    options: { onToken?: (token: string) => void; stream?: boolean } = {}
+  ): Promise<string> {
+    const parts = arg.trim().split(/\s+/);
+    const sub = (parts[0] || "help").toLowerCase();
+    const rest = parts.slice(1).join(" ").trim();
+
+    switch (sub) {
+      case "help":
+      case "":
+      case "--help":
+      case "-h":
+        return SmartWritingManager.helpText();
+
+      case "start":
+      case "begin":
+      case "new": {
+        // /smart-writing start [Title: ] seed...  — optional "Title: seed" form
+        let title: string | undefined;
+        let seed = rest;
+        const m = rest.match(/^(.{1,80}?):\s+(.+)$/);
+        if (m && m[1] && m[2] && m[1].length < 60) {
+          title = m[1].trim();
+          seed = m[2].trim();
+        }
+        return await this.writing.start(seed, title);
+      }
+
+      case "add":
+      case "append":
+      case "note": {
+        if (!rest) return "Usage: /smart-writing add <sentences or paragraphs to append>";
+        return this.writing.addText(rest);
+      }
+
+      case "continue":
+      case "go":
+      case "next": {
+        return await this.writing.continueDraft({ onToken: options.onToken, stream: options.stream ?? true });
+      }
+
+      case "improve":
+      case "polish":
+      case "rewrite":
+      case "edit":
+      case "expand":
+      case "shorten": {
+        const instruction = sub === "improve" || sub === "polish" ? rest : `${sub} ${rest}`.trim();
+        return await this.writing.improveDraft(instruction, {
+          onToken: options.onToken,
+          stream: options.stream ?? true,
+        });
+      }
+
+      case "show":
+      case "draft":
+      case "view":
+        return this.writing.show();
+
+      case "status":
+        return this.writing.status();
+
+      case "save":
+      case "persist":
+      case "remember": {
+        return await this.writing.save(rest || undefined);
+      }
+
+      case "list":
+      case "stories":
+      case "library": {
+        const n = parseInt(rest, 10);
+        return this.writing.listStories(Number.isFinite(n) ? n : 10);
+      }
+
+      case "links":
+      case "graph":
+      case "associations": {
+        if (!rest) return "Usage: /smart-writing links <story_memory_id> (see /smart-writing list)";
+        return this.writing.showLinks(rest.split(/\s+/)[0]!);
+      }
+
+      case "done":
+      case "finish":
+      case "end":
+      case "stop":
+      case "close":
+        return this.writing.done();
+
+      case "cancel":
+      case "discard":
+      case "reset":
+        return this.writing.cancel();
+
+      default: {
+        // Bare text after /smart-writing (e.g. "/smart-writing Once upon...")
+        // is treated as: start if idle, else append.
+        if (!this.writing.isActive()) {
+          return await this.writing.start(arg, undefined);
+        }
+        return this.writing.addText(arg);
+      }
     }
   }
 
@@ -462,8 +611,25 @@ Candidate Rules:    ${stats.candidateRules}
         if (!trimmed) continue;
 
         if (trimmed.startsWith("/")) {
-          const resp = await this.handleCommand(trimmed);
-          console.log(`\x1b[33m${resp}\x1b[0m\n`);
+          const isWritingGen =
+            /^\/smart-writing\s+(continue|improve|polish|rewrite|edit|expand|shorten)\b/i.test(trimmed) ||
+            /^\/(smart-write|write|story)\s+(continue|improve|polish|rewrite|edit|expand|shorten)\b/i.test(trimmed);
+          if (isWritingGen) {
+            process.stdout.write(`\x1b[32m${this.getBotDisplayName()}:\x1b[0m `);
+            let streamed = false;
+            const resp = await this.handleCommand(trimmed, {
+              stream: true,
+              onToken: (token) => {
+                streamed = true;
+                process.stdout.write(token);
+              },
+            });
+            if (!streamed) process.stdout.write(resp);
+            console.log("\n");
+          } else {
+            const resp = await this.handleCommand(trimmed);
+            console.log(`\x1b[33m${resp}\x1b[0m\n`);
+          }
           if (!this.isRunning) break;
           continue;
         }

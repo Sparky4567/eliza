@@ -7,7 +7,8 @@ export type MemoryType =
   | "relationship"
   | "instruction"
   | "correction"
-  | "observation";
+  | "observation"
+  | "story";
 
 export type MemoryStatus = "active" | "superseded" | "forgotten";
 

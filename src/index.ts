@@ -12,6 +12,7 @@ import { ResponseEvaluator } from "./bot/evaluator.ts";
 import { ResponseEngine } from "./bot/response.ts";
 import { LearningPipeline } from "./knowledge/learning.ts";
 import { ConversationBot } from "./bot/conversation.ts";
+import { SmartWritingManager } from "./writing/smart-writing.ts";
 
 export function createBot(customConfig: Partial<BotConfig> = {}): ConversationBot {
   const config: BotConfig = {
@@ -39,6 +40,7 @@ export function createBot(customConfig: Partial<BotConfig> = {}): ConversationBo
   const evaluator = new ResponseEvaluator(db, ollama);
   const responseEngine = new ResponseEngine(matcher, contextBuilder, ollama, evaluator, db);
   const learningPipeline = new LearningPipeline(db, memoryStore, knowledgeStore, ruleRegistry, ollama);
+  const writing = new SmartWritingManager(db, ollama, memoryStore, memoryRetriever, knowledgeStore, knowledgeRetriever);
 
   return new ConversationBot(
     db,
@@ -50,7 +52,8 @@ export function createBot(customConfig: Partial<BotConfig> = {}): ConversationBo
     knowledgeRetriever,
     responseEngine,
     learningPipeline,
-    config
+    config,
+    writing
   );
 }
 
