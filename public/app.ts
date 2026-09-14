@@ -278,5 +278,156 @@ try {
   if (localStorage.getItem(FOCUS_KEY) === "1") setFocus(true);
 } catch { /* private mode etc. */ }
 
+// ---------------------------------------------------------------------------
+// Channels panel: Telegram + WhatsApp status, runtime connect, QR pairing,
+// and outbound test messages. Same bot + memory as the chat beside it.
+// ---------------------------------------------------------------------------
+const channelsEl = $("channels");
+
+function chMsg(el: HTMLElement | null, text: string, cls = "") {
+  if (!el) return;
+  el.textContent = text;
+  el.className = `ch-msg ${cls}`;
+}
+
+function renderChannelsSkeleton(c: any) {
+  const tg = c?.telegram ?? {};
+  const wa = c?.whatsapp ?? {};
+  const tgLine = tg.running
+    ? `✅ running${tg.username ? ` (@${esc(tg.username)})` : ""} · polling Telegram`
+    : tg.configured
+      ? `⚙️ token set · not running (restart with <code>--telegram</code>, or connect below)`
+      : `⚪ not configured — paste a bot token to connect`;
+  const waLine = wa.running
+    ? `✅ bridge listening on <code>:${esc(String(wa.port ?? ""))}</code>`
+    : `⚪ not running (launch with <code>--whatsapp</code> or <code>WHATSAPP_ENABLED=true</code>)`;
+  channelsEl.innerHTML =
+    `<div class="ch-block"><div class="ch-title">✈️ Telegram</div>` +
+    `<div class="ch-sub">${tgLine}</div>` +
+    `<input type="password" id="chTgToken" placeholder="Bot token (connect / reconnect)" autocomplete="off" />` +
+    `<div class="ch-actions"><button id="chTgStart">Connect</button></div>` +
+    `<input type="text" id="chTgChat" placeholder="chat id (for test send)" autocomplete="off" />` +
+    `<input type="text" id="chTgText" placeholder="message to send via Telegram" autocomplete="off" />` +
+    `<div class="ch-actions"><button id="chTgSend"${tg.running ? "" : " disabled"}>Send via Telegram</button></div>` +
+    `<div class="ch-msg" id="chTgMsg"></div></div>` +
+    `<div class="ch-block"><div class="ch-title">📱 WhatsApp</div>` +
+    `<div class="ch-sub">${waLine}</div>` +
+    `<div class="ch-sub" id="chWaStatus">checking bridge…</div>` +
+    `<img class="qr" id="chWaQr" style="display:none" alt="WhatsApp pairing QR — scan with your phone camera" />` +
+    `<input type="text" id="chWaTo" placeholder="recipient JID (e.g. 12345@s.whatsapp.net)" autocomplete="off" />` +
+    `<input type="text" id="chWaText" placeholder="message to send via WhatsApp" autocomplete="off" />` +
+    `<div class="ch-actions"><button id="chWaSend"${wa.running ? "" : " disabled"}>Send via WhatsApp</button>` +
+    `<button id="chWaReset">Reset auth</button> <button id="chWaRefresh">Refresh</button></div>` +
+    `<div class="ch-msg" id="chWaMsg"></div></div>`;
+
+  ($("chTgStart") as HTMLButtonElement).onclick = async () => {
+    const token = (($("chTgToken") as HTMLInputElement).value || "").trim();
+    const m = $("chTgMsg");
+    chMsg(m, "connecting…");
+    try {
+      const res = await fetch("/api/channels/telegram/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const j = (await res.json()) as any;
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      chMsg(m, `connected${j.username ? ` (@${j.username})` : ""} ✓`, "ok");
+      void refreshChannelsSummary();
+    } catch (e: any) {
+      chMsg(m, `connect failed: ${e?.message ?? e}`, "err");
+    }
+  };
+  ($("chTgSend") as HTMLButtonElement).onclick = async () => {
+    const chatId = (($("chTgChat") as HTMLInputElement).value || "").trim();
+    const text = (($("chTgText") as HTMLInputElement).value || "").trim();
+    void postChannelSend("/api/channels/telegram/send", { chat_id: chatId, text }, $("chTgMsg"));
+  };
+  ($("chWaSend") as HTMLButtonElement).onclick = async () => {
+    const to = (($("chWaTo") as HTMLInputElement).value || "").trim();
+    const text = (($("chWaText") as HTMLInputElement).value || "").trim();
+    void postChannelSend("/api/channels/whatsapp/send", { to, text }, $("chWaMsg"));
+  };
+  ($("chWaReset") as HTMLButtonElement).onclick = async () => {
+    const m = $("chWaMsg");
+    chMsg(m, "resetting auth…");
+    try {
+      const res = await fetch("/api/channels/whatsapp/reset", { method: "POST" });
+      const j = (await res.json()) as any;
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      chMsg(m, `${j.message ?? "auth reset"} — re-scan the QR to reconnect.`, "ok");
+      void updateWaStatus();
+    } catch (e: any) {
+      chMsg(m, `reset failed: ${e?.message ?? e}`, "err");
+    }
+  };
+  ($("chWaRefresh") as HTMLButtonElement).onclick = () => {
+    void refreshChannelsSummary();
+    void updateWaStatus();
+  };
+}
+
+async function postChannelSend(url: string, payload: Record<string, string>, msgEl: HTMLElement | null) {
+  chMsg(msgEl, "sending…");
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const j = (await res.json()) as any;
+    if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+    chMsg(msgEl, "sent ✓", "ok");
+  } catch (e: any) {
+    chMsg(msgEl, `send failed: ${e?.message ?? e}`, "err");
+  }
+}
+
+async function refreshChannelsSummary() {
+  try {
+    const res = await fetch("/api/channels");
+    const c = (await res.json()) as any;
+    renderChannelsSkeleton(c);
+    void updateWaStatus();
+  } catch {
+    channelsEl.innerHTML = "<span style='color:var(--dim)'>channels unavailable</span>";
+  }
+}
+
+async function updateWaStatus() {
+  const st = $("chWaStatus") as HTMLElement | null;
+  const qr = $("chWaQr") as HTMLImageElement | null;
+  if (!st) return; // skeleton not rendered yet
+  try {
+    const res = await fetch("/api/channels/whatsapp/status");
+    const j = (await res.json()) as any;
+    if (!res.ok) {
+      st.textContent = `bridge: ${j.error ?? "offline"}`;
+      if (qr) qr.style.display = "none";
+      return;
+    }
+    const b = j.bridge ?? {};
+    const conn = String(b.connection ?? "unknown");
+    const phone = b.phone ? ` · ${b.phone}` : "";
+    const last = b.lastJid ? ` · last: ${b.lastJid}` : "";
+    const err = b.lastError ? ` · ⚠️ ${b.lastError}` : "";
+    st.textContent = `bridge: ${conn}${phone}${last}${err}`;
+    if (qr) {
+      if (b.qrImage && conn !== "open") {
+        qr.src = String(b.qrImage);
+        qr.style.display = "";
+      } else {
+        qr.style.display = "none";
+      }
+    }
+  } catch {
+    st.textContent = "bridge: status check failed";
+    if (qr) qr.style.display = "none";
+  }
+}
+
+void refreshChannelsSummary();
+setInterval(() => { void updateWaStatus(); }, 5000);
+
 connect();
 log("eliza 🤖", "Hey — I'm ELIZA-AI in the browser. Type below, or try `/help`, `/stats`, `/trace`.", "ai", { markdown: true });

@@ -22,6 +22,16 @@ export interface BotConfig {
   web: {
     port: number;
   };
+  telegram: {
+    enabled: boolean;
+    token: string;
+  };
+  whatsapp: {
+    enabled: boolean;
+    phone: string;
+    port: number;
+    statusPort: number;
+  };
 }
 
 const defaultDataDir = path.resolve(import.meta.dir, "../data");
@@ -47,5 +57,15 @@ export const defaultConfig: BotConfig = {
   },
   web: {
     port: Number(process.env.ELIZA_WEB_PORT ?? process.env.WEB_PORT ?? process.env.PORT ?? 3000),
+  },
+  telegram: {
+    enabled: process.env.TELEGRAM_ENABLED !== "false",
+    token: process.env.TELEGRAM_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "",
+  },
+  whatsapp: {
+    enabled: process.env.WHATSAPP_ENABLED === "true" || process.env.WHATSAPP_ENABLED === "1",
+    phone: process.env.WHATSAPP_PHONE || "",
+    port: Number(process.env.WHATSAPP_PORT ?? process.env.ELIZA_CHAT_PORT ?? 8765),
+    statusPort: Number(process.env.WHATSAPP_STATUS_PORT ?? 8766),
   },
 };

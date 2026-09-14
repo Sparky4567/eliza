@@ -89,6 +89,11 @@ export class ConversationBot {
     return this.db.getStats();
   }
 
+  /** Merged runtime config (used by channel bridges for tokens/ports). */
+  public getConfig(): BotConfig {
+    return this.config;
+  }
+
   /** Full execution trace of the most recent turn (used by CLI /trace and the web server). */
   public getLastTrace(): ResponseTrace | null {
     return this.responseEngine.getLastTrace();
@@ -120,6 +125,137 @@ export class ConversationBot {
       { $sessionId: this.sessionId }
     );
     return rows;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Remote channels (Telegram / WhatsApp): per-chat isolated sessions.
+  // Each (channel, chatId) pair gets its own row in `sessions` so CLI history
+  // stays separate from remote contacts, mirroring llama's remoteSession().
+  // ---------------------------------------------------------------------------
+
+  /** Deterministic session id for a remote contact, e.g. `telegram_12345`. */
+  public static channelSessionId(channel: string, chatId: string): string {
+    const safeChat = String(chatId).replace(/[^A-Za-z0-9_@.\-]/g, "_").slice(0, 128) || "unknown";
+    return `${channel}_${safeChat}`;
+  }
+
+  private getOrCreateChannelSession(channel: string, chatId: string): string {
+    const id = ConversationBot.channelSessionId(channel, chatId);
+    const existing = this.db.get<{ id: string }>("SELECT id FROM sessions WHERE id = $id", { $id: id });
+    if (!existing) {
+      const now = new Date().toISOString();
+      this.db.run(
+        `INSERT INTO sessions (id, created_at, updated_at, title) VALUES ($id, $created_at, $updated_at, $title)`,
+        { $id: id, $created_at: now, $updated_at: now, $title: `${channel} chat ${chatId}` }
+      );
+    } else {
+      this.db.run(`UPDATE sessions SET updated_at = $now WHERE id = $id`, {
+        $now: new Date().toISOString(),
+        $id: id,
+      });
+    }
+    return id;
+  }
+
+  public getChannelHistory(channel: string, chatId: string): Array<{ role: "user" | "assistant"; content: string }> {
+    const sessionId = this.getOrCreateChannelSession(channel, chatId);
+    return this.db.query<{ role: "user" | "assistant"; content: string }>(
+      "SELECT role, content FROM messages WHERE session_id = $sessionId ORDER BY created_at ASC",
+      { $sessionId: sessionId }
+    );
+  }
+
+  private recordChannelMessage(
+    sessionId: string,
+    role: "user" | "assistant",
+    content: string,
+    strategy?: string
+  ): void {
+    const id = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
+    this.db.run(
+      `INSERT INTO messages (id, session_id, role, content, strategy, created_at, metadata)
+       VALUES ($id, $session_id, $role, $content, $strategy, $created_at, NULL)`,
+      { $id: id, $session_id: sessionId, $role: role, $content: content, $strategy: strategy || null, $created_at: now }
+    );
+    this.db.run(`UPDATE sessions SET updated_at = $now WHERE id = $id`, { $now: now, $id: sessionId });
+  }
+
+  /**
+   * Process one remote turn (Telegram/WhatsApp). Uses an isolated per-chat
+   * session, normalizes the llama-style "@cmd" prefix to "/cmd", and reuses
+   * the same ResponseEngine + learning pipeline as the CLI.
+   */
+  public async handleChannelInput(
+    channel: "telegram" | "whatsapp" | string,
+    chatId: string,
+    text: string,
+    options: { onToken?: (token: string) => void; stream?: boolean } = {}
+  ): Promise<{ response: string; isCommand: boolean; trace?: any }> {
+    const trimmed = text.trim();
+    const sessionId = this.getOrCreateChannelSession(channel, chatId);
+    if (!trimmed) {
+      return { response: "Please say something.", isCommand: false };
+    }
+
+    // llama compat: "@help" == "/help" (same length, same slice offsets downstream)
+    const normalized = trimmed.startsWith("@") ? "/" + trimmed.slice(1) : trimmed;
+
+    if (normalized.startsWith("/")) {
+      const cmd = normalized.split(" ")[0]!.toLowerCase();
+      if (cmd === "/clear") {
+        this.db.run("DELETE FROM messages WHERE session_id = $sessionId", { $sessionId: sessionId });
+        return { response: "Conversation context cleared. Started fresh session.", isCommand: true };
+      }
+      if (cmd === "/quit" || cmd === "/exit") {
+        return { response: "Goodbye. (Remote sessions stay saved — send /clear to start fresh.)", isCommand: true };
+      }
+      const output = await this.handleCommand(normalized, options);
+      return { response: output, isCommand: true };
+    }
+
+    if (this.writing.isActive()) {
+      this.recordChannelMessage(sessionId, "user", trimmed);
+      const appendNote = this.writing.addText(trimmed);
+      const continuation = await this.writing.continueDraft({ onToken: options.onToken, stream: options.stream });
+      if (continuation.startsWith("✍️ Smart writing requires") || continuation.startsWith("⚠️")) {
+        const offlineReply = `${appendNote}\n\n${continuation}`;
+        this.recordChannelMessage(sessionId, "assistant", offlineReply, "smart_writing_append_offline");
+        return { response: offlineReply, isCommand: false };
+      }
+      this.recordChannelMessage(sessionId, "assistant", continuation, "smart_writing_continue");
+      return { response: continuation, isCommand: false };
+    }
+
+    this.recordChannelMessage(sessionId, "user", trimmed);
+    const history = this.db.query<{ role: "user" | "assistant"; content: string }>(
+      "SELECT role, content FROM messages WHERE session_id = $sessionId ORDER BY created_at ASC",
+      { $sessionId: sessionId }
+    );
+    const result = await this.responseEngine.generateResponse(trimmed, history, {
+      onToken: options.onToken,
+      stream: options.stream,
+    });
+    this.recordChannelMessage(sessionId, "assistant", result.response, result.strategy);
+
+    try {
+      if (this.config.learning.autoExtraction) {
+        const historyStr = history.slice(-4).map((h) => `${h.role}: ${h.content}`).join("\n");
+        await this.learningPipeline.extractWithLLM(trimmed, result.response, historyStr);
+      }
+    } catch (err: any) {
+      console.warn(`[learning] Post-turn extraction failed (reply unaffected): ${err?.message || err}`);
+    }
+    try {
+      if (this.config.learning.autoCandidateRules) {
+        const historyStr = history.slice(-4).map((h) => `${h.role}: ${h.content}`).join("\n");
+        await this.learningPipeline.proposeCandidateRule(trimmed, historyStr);
+      }
+    } catch (err: any) {
+      console.warn(`[learning] Candidate-rule proposal failed (reply unaffected): ${err?.message || err}`);
+    }
+
+    return { response: result.response, isCommand: false, trace: result.trace };
   }
 
   private recordMessage(role: "user" | "assistant", content: string, strategy?: string): void {

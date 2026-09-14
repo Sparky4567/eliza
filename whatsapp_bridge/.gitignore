@@ -1,0 +1,4 @@
+node_modules/
+auth/creds.json
+auth/*.json
+*.log

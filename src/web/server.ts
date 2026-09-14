@@ -7,9 +7,14 @@
 import index from "../../public/index.html";
 import { defaultConfig } from "../config.ts";
 import type { ConversationBot } from "../bot/conversation.ts";
+import type { ChannelHandles } from "../index.ts";
 
 export interface WebServerOptions {
   port?: number;
+  /** Live Telegram/WhatsApp bridges (from startChannels). Same reference is
+   *  mutated by POST /api/channels/telegram/start, so the UI can connect a
+   *  bot token at runtime without restarting the server. */
+  channels?: ChannelHandles;
 }
 
 type TurnToken = {
@@ -96,6 +101,43 @@ async function readJson(req: Request): Promise<any> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Channels (Telegram / WhatsApp): status snapshot + bridge proxies so the
+// browser UI can monitor pairing, show the WhatsApp QR, and send messages.
+// ---------------------------------------------------------------------------
+
+function channelSummary(bot: ConversationBot, channels?: ChannelHandles): Record<string, unknown> {
+  const cfg = bot.getConfig();
+  return {
+    telegram: {
+      configured: Boolean(cfg.telegram.token),
+      running: Boolean(channels?.telegram?.isRunning),
+      username: channels?.telegram?.botUsername ?? null,
+    },
+    whatsapp: {
+      enabled: Boolean(channels?.whatsapp?.isRunning),
+      running: Boolean(channels?.whatsapp?.isRunning),
+      phone: cfg.whatsapp.phone || null,
+      port: cfg.whatsapp.port,
+      statusPort: cfg.whatsapp.statusPort,
+    },
+  };
+}
+
+/** Fetch the Baileys bridge status object (connection, QR image, …). */
+async function fetchBridgeStatus(bot: ConversationBot): Promise<{ ok: boolean; status?: number; body: any }> {
+  const statusPort = bot.getConfig().whatsapp.statusPort;
+  try {
+    const res = await fetch(`http://127.0.0.1:${statusPort}/status`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body };
+  } catch (e: any) {
+    return { ok: false, body: { ok: false, error: `WhatsApp bridge unreachable on 127.0.0.1:${statusPort} (${e?.message ?? e})` } };
+  }
+}
+
 /**
  * Starts the web UI + API server for an existing bot instance.
  * Calls bot.init() (model auto-detection) before listening.
@@ -103,6 +145,7 @@ async function readJson(req: Request): Promise<any> {
 export async function startWebServer(bot: ConversationBot, opts: WebServerOptions = {}) {
   await bot.init();
   const port = opts.port ?? defaultConfig.web.port;
+  const channels = opts.channels;
 
   const server = Bun.serve<ConnState>({
     port,
@@ -214,6 +257,103 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
           } catch (e: any) {
             return Response.json({ error: String(e?.message ?? e) }, { status: 500 });
           }
+        },
+      },
+      "/api/channels": {
+        GET: async () => Response.json(channelSummary(bot, channels)),
+      },
+      "/api/channels/whatsapp/status": {
+        GET: async () => {
+          if (!channels?.whatsapp?.isRunning) {
+            return Response.json(
+              { ok: false, error: "WhatsApp bridge is not running (launch with --whatsapp or WHATSAPP_ENABLED=true)." },
+              { status: 503 }
+            );
+          }
+          const r = await fetchBridgeStatus(bot);
+          if (!r.ok) return Response.json(r.body, { status: 502 });
+          return Response.json({ ok: true, bridge: r.body });
+        },
+      },
+      "/api/channels/whatsapp/send": {
+        POST: async (req: Request) => {
+          const body = await readJson(req);
+          const to = String(body.to ?? body.jid ?? body.chat_id ?? "").trim();
+          const text = String(body.text ?? "").trim().slice(0, 4000);
+          if (!to || !text) {
+            return Response.json({ error: "POST {\"to\": \"<jid>\", \"text\": \"<message>\"} required" }, { status: 400 });
+          }
+          if (!channels?.whatsapp?.isRunning) {
+            return Response.json({ error: "WhatsApp bridge is not running." }, { status: 503 });
+          }
+          const statusPort = bot.getConfig().whatsapp.statusPort;
+          try {
+            const res = await fetch(`http://127.0.0.1:${statusPort}/send`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ jid: to, text }),
+              signal: AbortSignal.timeout(10000),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || (data as any).ok === false) {
+              return Response.json({ error: String((data as any).error ?? `bridge HTTP ${res.status}`) }, { status: 502 });
+            }
+            return Response.json({ ok: true });
+          } catch (e: any) {
+            return Response.json({ error: `bridge send failed: ${e?.message ?? e}` }, { status: 502 });
+          }
+        },
+      },
+      "/api/channels/whatsapp/reset": {
+        POST: async () => {
+          const { resetWhatsAppAuth } = await import("../channels/whatsapp.ts");
+          const r = resetWhatsAppAuth();
+          if (!r.success) return Response.json({ error: r.message }, { status: 404 });
+          return Response.json({ ok: true, message: r.message });
+        },
+      },
+      "/api/channels/telegram/send": {
+        POST: async (req: Request) => {
+          const body = await readJson(req);
+          const chatId = body.chat_id ?? body.chatId ?? body.to;
+          const text = String(body.text ?? "").trim().slice(0, 4000);
+          if ((chatId === undefined || chatId === "") || !text) {
+            return Response.json({ error: "POST {\"chat_id\": \"<id>\", \"text\": \"<message>\"} required" }, { status: 400 });
+          }
+          if (!channels?.telegram?.isRunning) {
+            return Response.json({ error: "Telegram bridge is not running (set TELEGRAM_TOKEN and restart, or POST a token to /api/channels/telegram/start)." }, { status: 503 });
+          }
+          try {
+            await channels.telegram.sendMessage(chatId as number | string, text);
+            return Response.json({ ok: true });
+          } catch (e: any) {
+            return Response.json({ error: String(e?.message ?? e) }, { status: 502 });
+          }
+        },
+      },
+      "/api/channels/telegram/start": {
+        POST: async (req: Request) => {
+          if (!channels) {
+            return Response.json({ error: "Channel registry not attached to this server." }, { status: 500 });
+          }
+          const body = await readJson(req);
+          const token = String(body.token ?? "").trim() || bot.getConfig().telegram.token;
+          if (!token) {
+            return Response.json({ error: "No token: POST {\"token\": \"<bot-token>\"} or set TELEGRAM_TOKEN." }, { status: 400 });
+          }
+          const { TelegramBotRunner } = await import("../channels/telegram.ts");
+          try {
+            channels.telegram?.stop();
+          } catch {
+            /* noop */
+          }
+          const runner = new TelegramBotRunner({ token, bot });
+          const ok = await runner.start();
+          if (!ok) {
+            return Response.json({ error: "Telegram rejected the token (getMe failed) — check the token and try again." }, { status: 502 });
+          }
+          channels.telegram = runner;
+          return Response.json({ ok: true, running: true, username: runner.botUsername });
         },
       },
     },

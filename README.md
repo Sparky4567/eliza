@@ -1,6 +1,6 @@
-# ELIZA-AI: Incrementally Learning LLM Bot in Bun (CLI + Web)
+# ELIZA-AI: Incrementally Learning LLM Bot in Bun (CLI + Web + Telegram + WhatsApp)
 
-A modular, incrementally learning conversational AI built with **Bun** and **TypeScript**. It combines the predictable, reflective empathy of classic ELIZA with a persistent cognitive layer, long-term memory, versioned knowledge base, and local LLM integration via **Ollama** (with real-time streaming). Talk to it in the terminal (`bun start`) or in the browser (`bun run web`).
+A modular, incrementally learning conversational AI built with **Bun** and **TypeScript**. It combines the predictable, reflective empathy of classic ELIZA with a persistent cognitive layer, long-term memory, versioned knowledge base, and local LLM integration via **Ollama** (with real-time streaming). Talk to it in the terminal (`bun start`), in the browser (`bun run web`), or from your phone via **Telegram** and **WhatsApp** — every channel shares the same bot, memory, and learning pipeline, with isolated per-chat sessions.
 
 ---
 
@@ -18,6 +18,9 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 - **Response Evaluation & Strategy Statistics**: Evaluates response quality (relevance, hallucination risk, memory utilization) and tracks success metrics across strategies (`ask_followup`, `explain_directly`, `eliza_rule`, `llm_contextual`).
 - **Observability & Diagnostics**: Interactive inspection via `/trace`, `/model`, `/stats`, `/memory`, `/knowledge`, `/rules`, and `/approve`.
 - **Web UI + API (`--web`)**: Browser chat with live token streaming over WebSocket, command buttons, and a context/trace side panel — plus a REST API (`/api/chat`, `/api/stats`, `/api/trace`, `/api/model`, …) with full CLI parity.
+- **Telegram bridge (`--telegram`)**: Zero-dependency Bot API long-polling (`src/channels/telegram.ts`, ported from llama). Each Telegram chat gets an isolated session; `@cmd` works like `/cmd`; replies over 4000 chars are auto-split.
+- **WhatsApp bridge (`--whatsapp`)**: Localhost HTTP bridge (`:8765/chat`) + Baileys socket process (`whatsapp_bridge/`, QR login on `:8766`, ported from llama). Each contact gets an isolated session.
+- **Channels panel in the web UI**: Side-panel card showing Telegram/WhatsApp status, the WhatsApp pairing QR inline, runtime Telegram connect (paste a token, no restart), auth reset, and outbound test-message senders (`/api/channels*`).
 - **Resilient LLM Layer**: Clear timeout errors (no more cryptic `The operation was aborted`), best-effort background learning that never breaks a reply, graceful ELIZA fallback, and a Ctrl+C-safe CLI loop.
 - **Smart Writing / Smart Notes (Ollama-only)**: `/smart-writing start …` opens a co-writing session — type multi-sentence / multi-line drafts and the bot continues or improves them until the story is done, then `/smart-writing save` persists it as a `story` memory + `writing` knowledge entry with 🔗 `memory_links` associations to related memories/knowledge.
 
@@ -26,20 +29,20 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 ## 📐 System Architecture
 
 ```text
-                ┌────────────────────┐  ┌────────────────────┐
-                │   Terminal User    │  │   Browser User     │
-                │   (bun start)      │  │   (bun run web)    │
-                └─────────┬──────────┘  └─────────┬──────────┘
-                          │                       ▼
-                          │              ┌────────────────────┐
-                          │              │  Web Server + WS   │ ◄── REST (/api/*) + live tokens
-                          │              └─────────┬──────────┘
-                          ▼                       ▼
-                         ┌────────────────────┐
-                         │ Conversation Loop  │ ◄── Slash Commands (/trace, /stats, etc.)
-                         └─────────┬──────────┘
-                                   │
-                                   ▼
+                ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
+                │   Terminal User    │  │   Browser User     │  │ Telegram / WhatsApp│
+                │   (bun start)      │  │   (bun run web)    │  │  (--telegram/--wa) │
+                └─────────┬──────────┘  └─────────┬──────────┘  └─────────┬──────────┘
+                           │                       ▼                       ▼
+                           │              ┌────────────────────┐  ┌────────────────────┐
+                           │              │  Web Server + WS   │  │ Channel Bridges    │ ◄── /api/channels* + QR
+                           │              └─────────┬──────────┘  └─────────┬──────────┘
+                           ▼                       ▼                       ▼
+                          ┌────────────────────┐
+                          │ Conversation Loop  │ ◄── Slash Commands (/trace, /stats, etc.)
+                          └─────────┬──────────┘         ▲ isolated per-chat sessions
+                                    │                   (telegram_<id>, whatsapp_<jid>)
+                                    ▼
                          ┌────────────────────┐
                          │  Context Builder   │
                          └─────────┬──────────┘
@@ -111,6 +114,24 @@ over WebSocket, the same slash commands as the CLI (`/help`, `/stats`,
 `/trace`, `/memory`, …, `/smart-writing …`), plus a context/trace side panel. REST + WS API below.
 Port fallback: `--port` flag, else `ELIZA_WEB_PORT` / `WEB_PORT` / `PORT` env.
 Composer: `Enter` sends, `Shift+Enter` inserts a newline (multi-line stories).
+
+### 3c. Connect Telegram and/or WhatsApp (ported from llama)
+
+```bash
+# Telegram: set a BotFather token, then run (CLI or --web — bridges start in both modes)
+TELEGRAM_TOKEN=<token> bun start
+# or: bun run src/index.ts --web --telegram --telegram-token <token>
+
+# WhatsApp: install the Baileys bridge deps once, then run
+bun run whatsapp:install
+bun run src/index.ts --web --whatsapp
+# scan the QR printed in the terminal — or right in the web UI Channels panel
+```
+
+Notes:
+- Telegram auto-starts whenever a token is present (`--telegram-token` flag → `TELEGRAM_TOKEN` / `TELEGRAM_BOT_TOKEN` env → `telegram.token` config); `--no-telegram` forces it off. WhatsApp starts on `--whatsapp` or `WHATSAPP_ENABLED=true`.
+- Remote chats reuse the full CLI stack (ELIZA rules, memory/knowledge retrieval, Ollama, learning) with **isolated per-chat sessions** (`telegram_<chatId>`, `whatsapp_<jid>`) — the CLI session is untouched. `/clear` in a remote chat clears only that chat.
+- Llama-style `@help` works like `/help` in remote chats. Voice notes get a polite text-mode notice (ELIZA has no STT/TTS pipeline).
 
 ### 4. Run the Test Suite
 ```bash
@@ -259,6 +280,12 @@ Notes:
 | `BOT_AUTO_EVALUATION`| `true` | Enables post-turn response evaluation and strategy scoring. |
 | `BOT_AUTO_RULES` | `true` | Enables candidate rule proposals from conversational patterns. |
 | `ELIZA_WEB_PORT` | `3000` | Port for `--web` mode (`WEB_PORT` / `PORT` also honored, `--port` wins). |
+| `TELEGRAM_TOKEN` | _(unset)_ | Telegram bot token (`TELEGRAM_BOT_TOKEN` also honored, `--telegram-token` wins). Presence auto-starts the bridge. |
+| `TELEGRAM_ENABLED` | `true` | Set to `false` to keep the Telegram bridge off even with a token (`--no-telegram` also works). |
+| `WHATSAPP_ENABLED` | `false` | Set to `true` (or pass `--whatsapp`) to start the WhatsApp bridge. |
+| `WHATSAPP_PHONE` | _(unset)_ | Default phone number passed to the Baileys bridge process (`--whatsapp-phone` wins). |
+| `WHATSAPP_PORT` | `8765` | Localhost HTTP bridge port (`/chat`, `--whatsapp-port` wins). |
+| `WHATSAPP_STATUS_PORT` | `8766` | Baileys status/QR port (`/status`, `/send`). |
 
 ---
 
@@ -276,6 +303,10 @@ Same bot, browser-hosted — modeled on zap's `Bun.serve` + WebSocket server:
 | Model | `GET /api/model`, `POST /api/model {"name"}` | Inspect / switch the active Ollama model |
 | Memory / Knowledge | `GET /api/memory?q=`, `GET /api/knowledge?q=` | Same output as CLI `/memory`, `/knowledge` |
 | Writing | `GET /api/writing?action=status\|show\|list\|links`, `POST /api/writing {"action","text"}` | Smart-writing session state, saved-story library, and association graph |
+| Channels | `GET /api/channels` | Telegram/WhatsApp summary (`configured`/`running`/`username`, ports — token never exposed) |
+| WhatsApp status | `GET /api/channels/whatsapp/status` | Baileys bridge proxy: connection, linked phone, last chat, QR image (503 bridge down, 502 node down) |
+| WhatsApp send/reset | `POST /api/channels/whatsapp/send {"to","text"}`, `POST /api/channels/whatsapp/reset` | Send via bridge `/send`; clear stale auth keys to re-pair |
+| Telegram send/start | `POST /api/channels/telegram/send {"chat_id","text"}`, `POST /api/channels/telegram/start {"token"}` | Send via polling runner; connect/reconnect a bot token at runtime |
 
 WS protocol (`/ws`, JSON): client→server `text {text}` · `stop`; server→client
 `ready` · `llm-token` · `llm-done {text, isCommand, trace}` · `turn-end` ·
@@ -289,10 +320,16 @@ composer works like the CLI.
 ```text
 index.ts                   # Root re-export + Bun entrypoint (delegates to src/index.ts)
 src/
-├── index.ts                # Application entrypoint, createBot() factory, --web/--port parsing
-├── config.ts               # Configuration settings and environment defaults
+├── index.ts                # Application entrypoint, createBot() factory, --web/--port/--telegram/--whatsapp parsing, startChannels()
+├── config.ts               # Configuration settings and environment defaults (incl. telegram/whatsapp)
+├── channels/
+│   ├── telegram.ts         # Telegram Bot API long-polling runner (zero-dep, llama port)
+│   └── whatsapp.ts         # WhatsApp localhost HTTP bridge + Baileys spawner (llama port)
 ├── web/
-│   └── server.ts           # Bun.serve web UI + REST + /ws streaming (zap-style)
+│   └── server.ts           # Bun.serve web UI + REST + /ws streaming (zap-style) + /api/channels*
+whatsapp_bridge/           # Baileys socket process: QR login (:8766), forwards to :8765/chat (llama port)
+│   ├── index.js            # (Node) socket, QR render, /status + /send
+│   └── auth/               # Phone-linked credentials (gitignored — never commit)
 ├── db/
 │   ├── database.ts         # High-performance bun:sqlite database wrapper
 │   └── schema.ts           # Database tables, relations, and indexes
@@ -343,12 +380,12 @@ public/
 
 ## 🧪 Testing
 
-Run all 49 automated tests (10 files):
+Run all 60 automated tests (11 files):
 ```bash
 bun test
 ```
 
-Expected output: `49 pass, 0 fail` (`199 expect() calls`).
+Expected output: `60 pass, 0 fail` (`244 expect() calls`).
 
 ---
 
@@ -357,8 +394,11 @@ Expected output: `49 pass, 0 fail` (`199 expect() calls`).
 ```bash
 bun start                          # CLI REPL (default)
 bun run web                        # Web UI on default port (3000)
+bun run telegram                   # CLI + Telegram bridge (needs TELEGRAM_TOKEN)
+bun run whatsapp                   # CLI + WhatsApp bridge (needs whatsapp:install + pairing)
 bun run src/index.ts --web --port 3000        # Explicit port
 bun run src/index.ts --web --port=3000        # Alternate form
+bun run src/index.ts --web --telegram --whatsapp --whatsapp-phone 12345
 ```
 
 Port resolution order: `--port` flag → `ELIZA_WEB_PORT` → `WEB_PORT` → `PORT` → `3000`.

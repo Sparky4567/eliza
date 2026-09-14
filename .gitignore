@@ -7,6 +7,10 @@ node_modules/
 *.db-wal
 *.db-shm
 
+# WhatsApp Baileys auth state (phone-linked credentials — never commit)
+whatsapp_bridge/auth/
+whatsapp_bridge/node_modules/
+
 # Environment files
 .env
 .env.local

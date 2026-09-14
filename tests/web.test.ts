@@ -15,10 +15,10 @@ async function startTestServer() {
 
 describe("Web server (--web, zap-style)", () => {
   test("parses --web and --port flags", () => {
-    expect(parseCliArgs([])).toEqual({ web: false, port: undefined });
-    expect(parseCliArgs(["--web"])).toEqual({ web: true, port: undefined });
-    expect(parseCliArgs(["--web", "--port", "4000"])).toEqual({ web: true, port: 4000 });
-    expect(parseCliArgs(["--web", "--port=4001"])).toEqual({ web: true, port: 4001 });
+    expect(parseCliArgs([])).toMatchObject({ web: false, port: undefined });
+    expect(parseCliArgs(["--web"])).toMatchObject({ web: true, port: undefined });
+    expect(parseCliArgs(["--web", "--port", "4000"])).toMatchObject({ web: true, port: 4000 });
+    expect(parseCliArgs(["--web", "--port=4001"])).toMatchObject({ web: true, port: 4001 });
   });
 
   test("GET /api/health reports offline rules mode", async () => {

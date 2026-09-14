@@ -9,6 +9,9 @@
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
     "web": "bun run src/index.ts --web",
+    "telegram": "bun run src/index.ts --telegram",
+    "whatsapp": "bun run src/index.ts --whatsapp",
+    "whatsapp:install": "bun install --cwd whatsapp_bridge",
     "test": "bun test"
   },
   "devDependencies": {
