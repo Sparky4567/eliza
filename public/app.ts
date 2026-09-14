@@ -279,6 +279,89 @@ try {
 } catch { /* private mode etc. */ }
 
 // ---------------------------------------------------------------------------
+// Model panel: inspect the active Ollama model, pick from available models
+// (persisted as the last-picked selection), refresh the list, or clear the
+// saved pick to fall back to auto-detect / rules mode.
+// ---------------------------------------------------------------------------
+const modelPanelEl = $("modelPanel");
+
+function modelMsg(text: string, cls = "") {
+  const el = $("modelMsg") as HTMLElement | null;
+  if (!el) return;
+  el.textContent = text;
+  el.className = `ch-msg ${cls}`;
+}
+
+async function refreshModelPanel() {
+  try {
+    const res = await fetch("/api/model");
+    const h = (await res.json()) as any;
+    const active = String(h.model ?? "rules");
+    const saved = h.savedModel ? String(h.savedModel) : "";
+    const available = (h.availableModels ?? []) as string[];
+    const options = Array.from(new Set([...(available as string[]), ...(saved && !available.includes(saved) ? [saved] : [])]));
+    modelPanelEl.innerHTML =
+      `<div class="ch-sub">active: <code>${esc(active)}</code>${saved ? ` · saved: <code>${esc(saved)}</code>` : " · no saved pick"}${h.ollama ? "" : " · <span title='Ollama unreachable'>offline</span>"}</div>` +
+      (options.length
+        ? `<select id="modelPick">${options.map((m) => `<option value="${esc(m)}"${m === active || (!available.includes(active) && m === saved) ? " selected" : ""}>${esc(m)}</option>`).join("")}</select>`
+        : `<input type="text" id="modelPickText" placeholder="model name (e.g. llama3.2)" autocomplete="off" />`) +
+      `<input type="text" id="modelCustom" placeholder="or type a model name…" autocomplete="off" />` +
+      `<div class="ch-actions"><button id="modelSave">Save & use</button><button id="modelRefresh">Refresh</button><button id="modelClear"${saved ? "" : " disabled"}>Forget saved</button></div>` +
+      `<div class="ch-msg" id="modelMsg"></div>`;
+    const readPick = () => {
+      const custom = (($("modelCustom") as HTMLInputElement | null)?.value || "").trim();
+      if (custom) return custom;
+      const sel = $("modelPick") as HTMLSelectElement | null;
+      if (sel) return (sel.value || "").trim();
+      const txt = $("modelPickText") as HTMLInputElement | null;
+      return (txt?.value || "").trim();
+    };
+    ($("modelSave") as HTMLButtonElement).onclick = async () => {
+      const name = readPick();
+      if (!name) {
+        modelMsg("type or pick a model name first", "err");
+        return;
+      }
+      modelMsg("saving…");
+      try {
+        const r = await fetch("/api/model", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        const j = (await r.json()) as any;
+        if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+        modelMsg(`saved ✓ active: ${j.model ?? name}`, "ok");
+        modelEl.textContent = String(j.displayName ?? j.model ?? name);
+        void refreshModelPanel();
+      } catch (e: any) {
+        modelMsg(`save failed: ${e?.message ?? e}`, "err");
+      }
+    };
+    ($("modelRefresh") as HTMLButtonElement).onclick = () => {
+      void refreshModelPanel();
+    };
+    ($("modelClear") as HTMLButtonElement | null)?.addEventListener("click", async () => {
+      modelMsg("forgetting saved pick…");
+      try {
+        const r = await fetch("/api/model", { method: "DELETE" });
+        const j = (await r.json()) as any;
+        if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+        modelMsg("saved pick forgotten — will auto-detect on next restart", "ok");
+        modelEl.textContent = String(j.displayName ?? j.model ?? "");
+        void refreshModelPanel();
+      } catch (e: any) {
+        modelMsg(`clear failed: ${e?.message ?? e}`, "err");
+      }
+    });
+  } catch {
+    modelPanelEl.innerHTML = "<span style='color:var(--dim)'>model info unavailable</span>";
+  }
+}
+
+void refreshModelPanel();
+
+// ---------------------------------------------------------------------------
 // Channels panel: Telegram + WhatsApp status, runtime connect, QR pairing,
 // and outbound test messages. Same bot + memory as the chat beside it.
 // ---------------------------------------------------------------------------
@@ -293,19 +376,22 @@ function chMsg(el: HTMLElement | null, text: string, cls = "") {
 function renderChannelsSkeleton(c: any) {
   const tg = c?.telegram ?? {};
   const wa = c?.whatsapp ?? {};
+  const preview = tg.preview ? ` (saved <code>${esc(String(tg.preview))}</code>${tg.persisted ? " · stored" : ""})` : "";
   const tgLine = tg.running
-    ? `✅ running${tg.username ? ` (@${esc(tg.username)})` : ""} · polling Telegram`
+    ? `✅ running${tg.username ? ` (@${esc(tg.username)})` : ""} · polling Telegram${preview}`
     : tg.configured
-      ? `⚙️ token set · not running (restart with <code>--telegram</code>, or connect below)`
-      : `⚪ not configured — paste a bot token to connect`;
+      ? `⚙️ token saved${preview} · not running — reconnect below or forget it`
+      : `⚪ not configured — paste a bot token to connect (it will be saved)`;
   const waLine = wa.running
     ? `✅ bridge listening on <code>:${esc(String(wa.port ?? ""))}</code>`
     : `⚪ not running (launch with <code>--whatsapp</code> or <code>WHATSAPP_ENABLED=true</code>)`;
   channelsEl.innerHTML =
     `<div class="ch-block"><div class="ch-title">✈️ Telegram</div>` +
     `<div class="ch-sub">${tgLine}</div>` +
-    `<input type="password" id="chTgToken" placeholder="Bot token (connect / reconnect)" autocomplete="off" />` +
-    `<div class="ch-actions"><button id="chTgStart">Connect</button></div>` +
+    `<input type="password" id="chTgToken" placeholder="${tg.configured ? "New token (edit — leave empty to reuse saved)" : "Bot token (connect / reconnect)"}" autocomplete="off" />` +
+    `<div class="ch-actions"><button id="chTgStart">${tg.configured ? "Save & Connect" : "Connect"}</button>` +
+    `<button id="chTgStop"${tg.running ? "" : " disabled"}>Disconnect</button>` +
+    `<button id="chTgForget"${tg.configured ? "" : " disabled"}>Forget token</button></div>` +
     `<input type="text" id="chTgChat" placeholder="chat id (for test send)" autocomplete="off" />` +
     `<input type="text" id="chTgText" placeholder="message to send via Telegram" autocomplete="off" />` +
     `<div class="ch-actions"><button id="chTgSend"${tg.running ? "" : " disabled"}>Send via Telegram</button></div>` +
@@ -323,7 +409,11 @@ function renderChannelsSkeleton(c: any) {
   ($("chTgStart") as HTMLButtonElement).onclick = async () => {
     const token = (($("chTgToken") as HTMLInputElement).value || "").trim();
     const m = $("chTgMsg");
-    chMsg(m, "connecting…");
+    if (!token && !tg.configured) {
+      chMsg(m, "paste a bot token first", "err");
+      return;
+    }
+    chMsg(m, token ? "saving & connecting…" : "connecting with saved token…");
     try {
       const res = await fetch("/api/channels/telegram/start", {
         method: "POST",
@@ -332,10 +422,37 @@ function renderChannelsSkeleton(c: any) {
       });
       const j = (await res.json()) as any;
       if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
-      chMsg(m, `connected${j.username ? ` (@${j.username})` : ""} ✓`, "ok");
+      chMsg(m, `connected${j.username ? ` (@${j.username})` : ""} ✓ token saved`, "ok");
+      ($("chTgToken") as HTMLInputElement).value = "";
       void refreshChannelsSummary();
     } catch (e: any) {
       chMsg(m, `connect failed: ${e?.message ?? e}`, "err");
+    }
+  };
+  ($("chTgStop") as HTMLButtonElement).onclick = async () => {
+    const m = $("chTgMsg");
+    chMsg(m, "disconnecting…");
+    try {
+      const res = await fetch("/api/channels/telegram/start", { method: "DELETE" });
+      const j = (await res.json()) as any;
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      chMsg(m, "disconnected — saved token kept, reconnect anytime", "ok");
+      void refreshChannelsSummary();
+    } catch (e: any) {
+      chMsg(m, `disconnect failed: ${e?.message ?? e}`, "err");
+    }
+  };
+  ($("chTgForget") as HTMLButtonElement).onclick = async () => {
+    const m = $("chTgMsg");
+    chMsg(m, "forgetting token…");
+    try {
+      const res = await fetch("/api/channels/telegram/token", { method: "DELETE" });
+      const j = (await res.json()) as any;
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      chMsg(m, "token forgotten ✓ (bridge stopped)", "ok");
+      void refreshChannelsSummary();
+    } catch (e: any) {
+      chMsg(m, `forget failed: ${e?.message ?? e}`, "err");
     }
   };
   ($("chTgSend") as HTMLButtonElement).onclick = async () => {

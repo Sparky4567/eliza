@@ -139,7 +139,16 @@ export async function startChannels(bot: ConversationBot, opts: CliOptions): Pro
   // --telegram forces the attempt so a missing token prints a hint.
   let telegram: ChannelHandles["telegram"] = null;
   if (!opts.noTelegram) {
-    const token = (opts.telegramToken || "").trim() || cfg.telegram.token;
+    const cliToken = (opts.telegramToken || "").trim();
+    // Persist an explicit CLI token so restarts reuse it (editable via web UI).
+    if (cliToken) {
+      try {
+        bot.setTelegramToken(cliToken);
+      } catch {
+        /* validation happens in the bridge */
+      }
+    }
+    const token = cliToken || cfg.telegram.token;
     if (token || opts.telegram) {
       telegram = await startTelegramBridge({
         bot,

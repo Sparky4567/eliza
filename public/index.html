@@ -46,6 +46,9 @@
   #ctx, #trace { font-size:13px; color:var(--dim); display:flex; flex-direction:column; gap:6px; max-height:26vh; overflow:auto; }
   #trace .k { color:var(--txt); }
   #channels input[type=text], #channels input[type=password] { width:100%; background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:7px 10px; color:var(--txt); font-size:13px; }
+  #modelPanel input[type=text], #modelPanel select { width:100%; background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:7px 10px; color:var(--txt); font-size:13px; }
+  #modelPanel .ch-msg { font-size:12px; min-height:16px; }
+  #modelPanel .ch-msg.ok { color:var(--ok); } #modelPanel .ch-msg.err { color:#f85149; }
   #channels .ch-block { border:1px solid var(--line); border-radius:8px; padding:9px 10px; display:flex; flex-direction:column; gap:7px; }
   #channels .ch-title { font-weight:600; font-size:13px; }
   #channels .ch-sub { color:var(--dim); font-size:12px; }
@@ -91,6 +94,8 @@
   <section class="card" id="side">
     <h2>Backend</h2>
     <div id="backend" style="font-size:13px;color:var(--dim)">…</div>
+    <h2 style="margin-top:14px">Model</h2>
+    <div id="modelPanel" style="font-size:13px;display:flex;flex-direction:column;gap:8px"><span style="color:var(--dim)">loading…</span></div>
     <h2 style="margin-top:14px">Commands</h2>
     <div class="cmds" id="cmds">
       <button data-cmd="/stats">/stats</button>

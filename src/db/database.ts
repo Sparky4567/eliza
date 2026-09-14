@@ -66,6 +66,31 @@ export class BotDatabase {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Persistent user settings (key-value). Used for the last-picked Ollama
+  // model and the Telegram bot token so web UI selections survive restarts
+  // and can be edited / deleted by the user.
+  // ---------------------------------------------------------------------------
+
+  public getSetting(key: string): string | null {
+    const row = this.get<{ value: string }>("SELECT value FROM settings WHERE key = $key", {
+      $key: key,
+    });
+    return row?.value ?? null;
+  }
+
+  public setSetting(key: string, value: string): void {
+    this.run(
+      `INSERT INTO settings (key, value, updated_at) VALUES ($key, $value, $now)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      { $key: key, $value: value, $now: new Date().toISOString() }
+    );
+  }
+
+  public deleteSetting(key: string): void {
+    this.run(`DELETE FROM settings WHERE key = $key`, { $key: key });
+  }
+
   public getStats(): {
     sessions: number;
     messages: number;

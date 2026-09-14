@@ -46,6 +46,9 @@ async function health(bot: ConversationBot): Promise<Record<string, unknown>> {
     model: bot.getActiveModelName(),
     displayName: bot.getBotDisplayName(),
     availableModels: available,
+    // Last-picked model saved in the DB (null when never picked) + whether
+    // the active model came from that saved pick.
+    savedModel: bot.getPersistedModel(),
   };
 }
 
@@ -107,19 +110,22 @@ async function readJson(req: Request): Promise<any> {
 // ---------------------------------------------------------------------------
 
 function channelSummary(bot: ConversationBot, channels?: ChannelHandles): Record<string, unknown> {
-  const cfg = bot.getConfig();
   return {
     telegram: {
-      configured: Boolean(cfg.telegram.token),
+      configured: bot.isTelegramConfigured(),
+      persisted: Boolean(bot.getPersistedTelegramToken()),
+      // Masked preview (last 4 chars) so the UI can show "saved ••••abcd"
+      // and support edit/delete without ever exposing the full token.
+      preview: bot.getTelegramTokenPreview() || null,
       running: Boolean(channels?.telegram?.isRunning),
       username: channels?.telegram?.botUsername ?? null,
     },
     whatsapp: {
       enabled: Boolean(channels?.whatsapp?.isRunning),
       running: Boolean(channels?.whatsapp?.isRunning),
-      phone: cfg.whatsapp.phone || null,
-      port: cfg.whatsapp.port,
-      statusPort: cfg.whatsapp.statusPort,
+      phone: bot.getConfig().whatsapp.phone || null,
+      port: bot.getConfig().whatsapp.port,
+      statusPort: bot.getConfig().whatsapp.statusPort,
     },
   };
 }
@@ -204,8 +210,16 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
           if (!name) {
             return Response.json({ error: "missing model name (POST {\"name\": \"<model>\"})" }, { status: 400 });
           }
-          bot.getLLM().setModel(name);
+          try {
+            bot.setActiveModel(name);
+          } catch (e: any) {
+            return Response.json({ error: String(e?.message ?? e) }, { status: 400 });
+          }
           return Response.json(await health(bot));
+        },
+        DELETE: async () => {
+          bot.clearActiveModel();
+          return Response.json({ ...(await health(bot)), cleared: true });
         },
       },
       "/api/memory": {
@@ -337,7 +351,7 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
             return Response.json({ error: "Channel registry not attached to this server." }, { status: 500 });
           }
           const body = await readJson(req);
-          const token = String(body.token ?? "").trim() || bot.getConfig().telegram.token;
+          const token = String(body.token ?? "").trim() || bot.getTelegramToken();
           if (!token) {
             return Response.json({ error: "No token: POST {\"token\": \"<bot-token>\"} or set TELEGRAM_TOKEN." }, { status: 400 });
           }
@@ -352,8 +366,47 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
           if (!ok) {
             return Response.json({ error: "Telegram rejected the token (getMe failed) — check the token and try again." }, { status: 502 });
           }
+          // Persist only after Telegram accepted the token (edit/overwrite).
+          try {
+            bot.setTelegramToken(token);
+          } catch {
+            /* persistence best-effort */
+          }
           channels.telegram = runner;
           return Response.json({ ok: true, running: true, username: runner.botUsername });
+        },
+        DELETE: async () => {
+          if (!channels) {
+            return Response.json({ error: "Channel registry not attached to this server." }, { status: 500 });
+          }
+          try {
+            channels.telegram?.stop();
+          } catch {
+            /* noop */
+          }
+          channels.telegram = null;
+          // Disconnect only — the saved token stays so the user can reconnect.
+          return Response.json({ ok: true, running: false, configured: bot.isTelegramConfigured(), disconnected: true });
+        },
+      },
+      "/api/channels/telegram/token": {
+        GET: async () =>
+          Response.json({
+            configured: bot.isTelegramConfigured(),
+            persisted: Boolean(bot.getPersistedTelegramToken()),
+            preview: bot.getTelegramTokenPreview() || null,
+          }),
+        DELETE: async () => {
+          if (channels) {
+            try {
+              channels.telegram?.stop();
+            } catch {
+              /* noop */
+            }
+            channels.telegram = null;
+          }
+          bot.clearTelegramToken();
+          return Response.json({ ok: true, configured: false, cleared: true });
         },
       },
     },

@@ -98,4 +98,12 @@ CREATE TABLE IF NOT EXISTS memory_links (
 
 CREATE INDEX IF NOT EXISTS idx_memory_links_source ON memory_links(source_id);
 CREATE INDEX IF NOT EXISTS idx_memory_links_target ON memory_links(target_id);
+
+-- Persistent user settings (key-value): last-picked Ollama model,
+-- Telegram bot token, etc. Survives restarts; editable via web UI.
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;

@@ -13,6 +13,17 @@ import type { OllamaClient } from "../llm/ollama.ts";
 import type { BotConfig } from "../config.ts";
 import { SmartWritingManager } from "../writing/smart-writing.ts";
 
+export const SETTING_MODEL_KEY = "ollama.model";
+export const SETTING_TELEGRAM_TOKEN_KEY = "telegram.token";
+
+/** Mask a secret for display (never send the full token to the web UI list views). */
+export function maskToken(token: string): string {
+  const t = (token || "").trim();
+  if (!t) return "";
+  if (t.length <= 4) return "••••";
+  return `••••${t.slice(-4)}`;
+}
+
 export class ConversationBot {
   private db: BotDatabase;
   private ruleRegistry: ElizaRuleRegistry;
@@ -56,12 +67,48 @@ export class ConversationBot {
   }
 
   /**
-   * Initializes the bot, auto-detecting the first available model from Ollama if not explicitly provided.
+   * Initializes the bot, restoring persisted settings (last-picked model +
+   * Telegram token) and auto-detecting the first available Ollama model when
+   * neither config nor persisted state provides one.
    */
   public async init(): Promise<void> {
+    // Restore persisted Telegram token when no explicit (env/CLI) token set.
+    try {
+      const persistedToken = this.db.getSetting(SETTING_TELEGRAM_TOKEN_KEY);
+      if (persistedToken && !this.config.telegram.token) {
+        this.config.telegram.token = persistedToken;
+      }
+    } catch {
+      /* settings table missing on very old DBs — initSchema creates it */
+    }
+
     const llm = this.responseEngine.getLLM();
-    if (!this.config.ollama.model && llm.isEnabled()) {
-      await llm.autoDetectDefaultModel();
+    // Explicit config model (env OLLAMA_MODEL) always wins for this session.
+    if (this.config.ollama.model) {
+      if (llm.getModel() !== this.config.ollama.model) llm.setModel(this.config.ollama.model);
+      return;
+    }
+    // Fall back to the last-picked model saved via /model or the web UI.
+    try {
+      const persistedModel = this.db.getSetting(SETTING_MODEL_KEY);
+      if (persistedModel) {
+        llm.setModel(persistedModel);
+        this.config.ollama.model = persistedModel;
+        return;
+      }
+    } catch {
+      /* ignore — fall through to autodetect */
+    }
+    if (llm.isEnabled()) {
+      const detected = await llm.autoDetectDefaultModel();
+      if (detected) {
+        this.config.ollama.model = detected;
+        try {
+          this.db.setSetting(SETTING_MODEL_KEY, detected);
+        } catch {
+          /* persistence best-effort */
+        }
+      }
     }
   }
 
@@ -102,6 +149,97 @@ export class ConversationBot {
   /** Smart-writing co-authoring manager (Ollama-gated). */
   public getWriting(): SmartWritingManager {
     return this.writing;
+  }
+
+  /** Direct DB access (used by settings persistence + web API). */
+  public getDatabase(): BotDatabase {
+    return this.db;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Persistent user settings: last-picked Ollama model + Telegram bot token.
+  // Stored in the SQLite `settings` table so they survive restarts and can be
+  // edited / deleted from the web UI (or via /model and channel endpoints).
+  // ---------------------------------------------------------------------------
+
+  /** Last-picked model saved in the DB (null when never picked). */
+  public getPersistedModel(): string | null {
+    try {
+      return this.db.getSetting(SETTING_MODEL_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Switch the active model AND persist it as the last-picked selection. */
+  public setActiveModel(name: string): string {
+    const clean = name.trim();
+    if (!clean) throw new Error("model name must not be empty");
+    this.responseEngine.getLLM().setModel(clean);
+    this.config.ollama.model = clean;
+    try {
+      this.db.setSetting(SETTING_MODEL_KEY, clean);
+    } catch (err: any) {
+      console.warn(`[settings] failed to persist model: ${err?.message || err}`);
+    }
+    return clean;
+  }
+
+  /** Forget the saved model pick (DB row deleted, in-memory reset to rules mode). */
+  public clearActiveModel(): void {
+    try {
+      this.db.deleteSetting(SETTING_MODEL_KEY);
+    } catch {
+      /* noop */
+    }
+    this.responseEngine.getLLM().setModel("");
+    this.config.ollama.model = "";
+  }
+
+  /** Effective Telegram token (explicit config/env wins, else persisted). */
+  public getTelegramToken(): string {
+    if (this.config.telegram.token) return this.config.telegram.token;
+    return this.getPersistedTelegramToken() ?? "";
+  }
+
+  /** Raw persisted token (null when never saved). Prefer getTelegramToken(). */
+  public getPersistedTelegramToken(): string | null {
+    try {
+      return this.db.getSetting(SETTING_TELEGRAM_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  public getTelegramTokenPreview(): string {
+    return maskToken(this.getTelegramToken());
+  }
+
+  public isTelegramConfigured(): boolean {
+    return Boolean(this.getTelegramToken());
+  }
+
+  /** Save a Telegram token (edit/overwrite) and use it for this session. */
+  public setTelegramToken(token: string): string {
+    const clean = token.trim();
+    if (!clean) throw new Error("token must not be empty");
+    this.config.telegram.token = clean;
+    try {
+      this.db.setSetting(SETTING_TELEGRAM_TOKEN_KEY, clean);
+    } catch (err: any) {
+      console.warn(`[settings] failed to persist telegram token: ${err?.message || err}`);
+    }
+    return clean;
+  }
+
+  /** Forget the saved Telegram token (DB row deleted, runtime config cleared). */
+  public clearTelegramToken(): void {
+    try {
+      this.db.deleteSetting(SETTING_TELEGRAM_TOKEN_KEY);
+    } catch {
+      /* noop */
+    }
+    this.config.telegram.token = "";
   }
 
   private createSession(): string {
@@ -383,8 +521,8 @@ export class ConversationBot {
       case "/model": {
         const llm = this.responseEngine.getLLM();
         if (arg) {
-          llm.setModel(arg);
-          return `Active Ollama model switched to (ELIZA:${arg}).`;
+          const clean = this.setActiveModel(arg);
+          return `Active Ollama model switched to (ELIZA:${clean}) — saved as your last-picked model.`;
         }
         const current = llm.getModel();
         const isUp = await llm.isAvailable();

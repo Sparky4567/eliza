@@ -21,6 +21,7 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 - **Telegram bridge (`--telegram`)**: Zero-dependency Bot API long-polling (`src/channels/telegram.ts`, ported from llama). Each Telegram chat gets an isolated session; `@cmd` works like `/cmd`; replies over 4000 chars are auto-split.
 - **WhatsApp bridge (`--whatsapp`)**: Localhost HTTP bridge (`:8765/chat`) + Baileys socket process (`whatsapp_bridge/`, QR login on `:8766`, ported from llama). Each contact gets an isolated session.
 - **Channels panel in the web UI**: Side-panel card showing Telegram/WhatsApp status, the WhatsApp pairing QR inline, runtime Telegram connect (paste a token, no restart), auth reset, and outbound test-message senders (`/api/channels*`).
+- **Persistent settings (model + Telegram token)**: The last-picked Ollama model and the Telegram bot token are saved in the SQLite `settings` table, survive restarts, and can be edited or deleted from the web UI (Model panel + Channels panel), via the API, or via `/model` / `--telegram-token`.
 - **Resilient LLM Layer**: Clear timeout errors (no more cryptic `The operation was aborted`), best-effort background learning that never breaks a reply, graceful ELIZA fallback, and a Ctrl+C-safe CLI loop.
 - **Smart Writing / Smart Notes (Ollama-only)**: `/smart-writing start …` opens a co-writing session — type multi-sentence / multi-line drafts and the bot continues or improves them until the story is done, then `/smart-writing save` persists it as a `story` memory + `writing` knowledge entry with 🔗 `memory_links` associations to related memories/knowledge.
 
@@ -247,7 +248,7 @@ Notes:
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `/help` | — | Displays the interactive help menu. |
-| `/model` | `[name]` | Shows available local models or switches the active model on the fly (e.g. `/model llama3.2`). |
+| `/model` | `[name]` | Shows available local models or switches the active model on the fly (e.g. `/model llama3.2`). The pick is saved in the DB and restored on restart. |
 | `/trace` | — | Displays detailed diagnostics on how the most recent response was constructed (matched patterns, retrieved memories, knowledge items, strategy, model, evaluation score, and notes). |
 | `/stats` | — | Shows database metrics (sessions, messages, active/superseded memories, knowledge, candidate rules, strategy scores). |
 | `/memory` | `[query]` | Lists recent memories or searches active memories using TF-IDF token scoring. |
@@ -272,7 +273,7 @@ Notes:
 | `BOT_DB_PATH` | `data/bot.db` | Path to the SQLite database file (`:memory:` supported for testing). |
 | `BOT_RULES_PATH` | `data/rules.json` | Path to the ELIZA pattern rules JSON file. |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint. |
-| `OLLAMA_MODEL` | _(auto-detect)_ | Ollama model for generation/extraction; empty means use the first available local model. |
+| `OLLAMA_MODEL` | _(auto-detect)_ | Ollama model for generation/extraction; empty means use the saved last-picked model, else the first available local model. |
 | `OLLAMA_ENABLED` | `true` | Set to `false` to disable LLM and run strictly in deterministic ELIZA mode. |
 | `OLLAMA_TIMEOUT_MS` | `60000` | Timeout in milliseconds for Ollama requests. |
 | `OLLAMA_STREAM` | `true` | Set to `false` to disable token streaming (return full replies at once). |
@@ -280,7 +281,7 @@ Notes:
 | `BOT_AUTO_EVALUATION`| `true` | Enables post-turn response evaluation and strategy scoring. |
 | `BOT_AUTO_RULES` | `true` | Enables candidate rule proposals from conversational patterns. |
 | `ELIZA_WEB_PORT` | `3000` | Port for `--web` mode (`WEB_PORT` / `PORT` also honored, `--port` wins). |
-| `TELEGRAM_TOKEN` | _(unset)_ | Telegram bot token (`TELEGRAM_BOT_TOKEN` also honored, `--telegram-token` wins). Presence auto-starts the bridge. |
+| `TELEGRAM_TOKEN` | _(unset)_ | Telegram bot token (`TELEGRAM_BOT_TOKEN` also honored, `--telegram-token` wins). Presence auto-starts the bridge. A token entered via CLI flag or web UI is saved in the DB and reused on restart (editable/deletable in the web UI). |
 | `TELEGRAM_ENABLED` | `true` | Set to `false` to keep the Telegram bridge off even with a token (`--no-telegram` also works). |
 | `WHATSAPP_ENABLED` | `false` | Set to `true` (or pass `--whatsapp`) to start the WhatsApp bridge. |
 | `WHATSAPP_PHONE` | _(unset)_ | Default phone number passed to the Baileys bridge process (`--whatsapp-phone` wins). |
@@ -300,13 +301,13 @@ Same bot, browser-hosted — modeled on zap's `Bun.serve` + WebSocket server:
 | Chat | `POST /api/chat {"message"}` | Full turn incl. slash commands → `{reply, isCommand, trace}` |
 | Command | `POST /api/command {"command":"/stats"}` | Explicit slash-command dispatch → `{output}` |
 | Stats / Trace | `GET /api/stats`, `GET /api/trace` | Same data as CLI `/stats`, `/trace` |
-| Model | `GET /api/model`, `POST /api/model {"name"}` | Inspect / switch the active Ollama model |
+| Model | `GET /api/model`, `POST /api/model {"name"}`, `DELETE /api/model` | Inspect / switch the active Ollama model (POST persists the pick as `savedModel`); DELETE forgets the saved pick (falls back to auto-detect / rules) |
 | Memory / Knowledge | `GET /api/memory?q=`, `GET /api/knowledge?q=` | Same output as CLI `/memory`, `/knowledge` |
 | Writing | `GET /api/writing?action=status\|show\|list\|links`, `POST /api/writing {"action","text"}` | Smart-writing session state, saved-story library, and association graph |
-| Channels | `GET /api/channels` | Telegram/WhatsApp summary (`configured`/`running`/`username`, ports — token never exposed) |
+| Channels | `GET /api/channels` | Telegram/WhatsApp summary (`configured`/`persisted`/`preview`/`running`/`username`, ports — only a masked `••••abcd` preview, never the full token) |
 | WhatsApp status | `GET /api/channels/whatsapp/status` | Baileys bridge proxy: connection, linked phone, last chat, QR image (503 bridge down, 502 node down) |
 | WhatsApp send/reset | `POST /api/channels/whatsapp/send {"to","text"}`, `POST /api/channels/whatsapp/reset` | Send via bridge `/send`; clear stale auth keys to re-pair |
-| Telegram send/start | `POST /api/channels/telegram/send {"chat_id","text"}`, `POST /api/channels/telegram/start {"token"}` | Send via polling runner; connect/reconnect a bot token at runtime |
+| Telegram send/start | `POST /api/channels/telegram/send {"chat_id","text"}`, `POST /api/channels/telegram/start {"token"}` | Send via polling runner; save/edit a bot token and connect at runtime (empty `token` reuses the saved one; persisted only after Telegram accepts it). `DELETE /api/channels/telegram/start` disconnects but keeps the token; `GET\|DELETE /api/channels/telegram/token` inspects (masked) / forgets it |
 
 WS protocol (`/ws`, JSON): client→server `text {text}` · `stop`; server→client
 `ready` · `llm-token` · `llm-done {text, isCommand, trace}` · `turn-end` ·
@@ -410,7 +411,8 @@ for an isolated in-memory DB.
 ## 📝 Notes
 
 - `data/bot.db*` (SQLite + WAL/SHM) is local runtime state and is gitignored —
-  it is created on first run. Delete it to reset sessions, memories, and knowledge.
+  it is created on first run. Delete it to reset sessions, memories, knowledge,
+  and saved settings (last-picked model, Telegram token).
 - `data/rules.json` ships 21 seeded ELIZA rules; learned candidates stay in the DB
   until approved via `/approve <id>`.
 - Offline-first: with Ollama down (or `OLLAMA_ENABLED=false`) the bot keeps working
