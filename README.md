@@ -78,11 +78,27 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### Quick install (Linux & macOS)
+```bash
+./install.sh
+# non-interactive with defaults (Bun check, Ollama, deps, gemma2 model, tests):
+./install.sh --yes
+# offline-only install (skip Ollama — bot falls back to ELIZA rules):
+./install.sh --no-ollama
+# also install the WhatsApp bridge dependencies (needs Node 18+):
+./install.sh --with-whatsapp
+```
+The script checks/installs **Bun** (≥1.0, required) and **Ollama** (optional),
+runs `bun install`, pulls the default model, and finishes with `bun test` as a
+smoke test. Flags: `--model NAME` (default `gemma2`, empty string skips the
+pull), `--no-ollama`, `--with-whatsapp`, `--skip-tests`, `-y`/`--yes`
+(non-interactive). Then jump straight to step 3 below.
+
+### Prerequisites (manual setup)
 - [Bun](https://bun.sh) (v1.0 or higher)
 - *(Optional)* [Ollama](https://ollama.com) running locally for LLM-powered context generation.
 
-### 1. Install Dependencies
+### 1. Install Dependencies (skip if you used `install.sh`)
 ```bash
 bun install
 ```
