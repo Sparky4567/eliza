@@ -12,6 +12,7 @@ import type { LearningPipeline } from "../knowledge/learning.ts";
 import type { OllamaClient } from "../llm/ollama.ts";
 import type { BotConfig } from "../config.ts";
 import { SmartWritingManager } from "../writing/smart-writing.ts";
+import { getNeuromorphicMemory } from "../memory/neuromorphic_memory.ts";
 
 export const SETTING_MODEL_KEY = "ollama.model";
 export const SETTING_TELEGRAM_TOKEN_KEY = "telegram.token";
@@ -718,6 +719,37 @@ Candidate Rules:    ${stats.candidateRules}
         }
 
         return out.trim();
+      }
+
+      case "/neuromorphic":
+      case "/nc-mem": {
+        const neuro = getNeuromorphicMemory(this.db);
+        const sub = (parts[1] || "status").toLowerCase();
+        if (sub === "toggle") {
+          neuro.setEnabled(!neuro.isEnabled());
+          return `Neuromorphic Cognitive Memory: ${neuro.isEnabled() ? "ON" : "OFF"}`;
+        }
+        if (sub === "on" || sub === "enable") {
+          neuro.setEnabled(true);
+          return "Neuromorphic Cognitive Memory: ON";
+        }
+        if (sub === "off" || sub === "disable") {
+          neuro.setEnabled(false);
+          return "Neuromorphic Cognitive Memory: OFF";
+        }
+        if (sub === "consolidate") {
+          const res = neuro.consolidate(true);
+          return `Consolidated ${res.consolidated} trace(s) (${res.reason}).`;
+        }
+        if (sub === "prune") {
+          const res = neuro.prune();
+          return `Pruned/forgotten ${res.pruned} memory(ies).`;
+        }
+        if (sub === "spikes") {
+          return JSON.stringify(neuro.getStats());
+        }
+        const stats = neuro.getStats();
+        return `Neuromorphic Cognitive Memory status:\n${JSON.stringify(stats, null, 2)}`;
       }
 
       case "/reload": {

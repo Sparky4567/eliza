@@ -13,6 +13,7 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 - **Graceful Offline Fallback**: If Ollama is offline or unavailable, seamlessly falls back to the deterministic ELIZA rule engine and reflective responses without crashing.
 - **Persistent SQLite Storage**: Built natively on `bun:sqlite` with WAL mode for high-performance storage of sessions, conversation turns, memories, knowledge, and learning events.
 - **Long-Term Memory & Contradiction Resolution**: Classifies memories (facts, preferences, goals, projects, instructions, corrections). When beliefs or project parameters change, previous memories are linked as `superseded_by` rather than silently deleted.
+- **Neuromorphic Cognitive Memory (plasticity layer)**: Memories carry an activation level that spikes on retrieval, decays over time (forgetting curve), strengthens via Hebbian links between co-retrieved memories, and is weighted by importance/confidence/type. Retrieval is re-ranked by activation; consolidation promotes hot traces (short → long term) and pruning forgets decayed, idle traces. Enabled automatically; inspect with `/neuromorphic`.
 - **Versioned Knowledge Base**: Records general concepts, definitions, and technical knowledge with full provenance chains (`version`, `previous_version_id`, `change_reason`).
 - **Post-Turn Incremental Learning**: Automatically extracts durable facts, user preferences, and explicit corrections after every turn using a hybrid heuristic + LLM extraction pipeline.
 - **Response Evaluation & Strategy Statistics**: Evaluates response quality (relevance, hallucination risk, memory utilization) and tracks success metrics across strategies (`ask_followup`, `explain_directly`, `eliza_rule`, `llm_contextual`).
@@ -268,6 +269,7 @@ Notes:
 | `/trace` | — | Displays detailed diagnostics on how the most recent response was constructed (matched patterns, retrieved memories, knowledge items, strategy, model, evaluation score, and notes). |
 | `/stats` | — | Shows database metrics (sessions, messages, active/superseded memories, knowledge, candidate rules, strategy scores). |
 | `/memory` | `[query]` | Lists recent memories or searches active memories using TF-IDF token scoring. |
+| `/neuromorphic` | `[status\|toggle\|on\|off\|consolidate\|prune\|spikes]` | Inspects and controls the neuromorphic cognitive memory layer (plasticity re-ranking, consolidation, pruning). Alias: `/nc-mem`. |
 | `/knowledge` | `[query]` | Lists knowledge base entries or searches concepts and definitions. |
 | `/remember` | `<text>` | Explicitly adds a durable fact or preference to persistent memory. |
 | `/forget` | `<id>` | Deactivates/forgets a specific memory by its ID. |

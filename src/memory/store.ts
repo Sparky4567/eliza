@@ -2,7 +2,7 @@ import type { BotDatabase } from "../db/database.ts";
 import type { Memory, MemoryCreateInput, MemoryQueryOptions, MemoryStatus, MemoryType } from "./models.ts";
 
 export class MemoryStore {
-  private db: BotDatabase;
+  public db: BotDatabase;
 
   constructor(db: BotDatabase) {
     this.db = db;

@@ -2,6 +2,7 @@ import type { BotDatabase } from "../db/database.ts";
 import type { MemoryStore } from "../memory/store.ts";
 import type { KnowledgeStore } from "./store.ts";
 import type { OllamaClient } from "../llm/ollama.ts";
+import { getNeuromorphicMemory } from "../memory/neuromorphic_memory.ts";
 import { MEMORY_EXTRACTION_PROMPT, CANDIDATE_RULE_PROMPT } from "../llm/prompts.ts";
 import type { ElizaRuleRegistry } from "../eliza/patterns.ts";
 
@@ -242,6 +243,12 @@ ${assistantResponse}`;
       // Storage failures etc. — never crash the chat loop.
       console.warn(`[learning] Failed to store extraction: ${err?.message || err}`);
     }
+
+    // Neuromorphic consolidation: promote repeatedly activated traces
+    // (short-term -> long-term). Throttled internally, non-blocking.
+    try {
+      getNeuromorphicMemory(this.db).consolidate();
+    } catch {}
 
     return result;
   }

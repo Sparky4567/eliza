@@ -1,10 +1,17 @@
 import type { Memory } from "./models.ts";
 import type { MemoryStore } from "./store.ts";
+import { getNeuromorphicMemory } from "./neuromorphic_memory.ts";
 
 export interface RetrievedMemory {
   memory: Memory;
   score: number;
   matchedTokens: string[];
+  activation?: number;
+  neuro?: {
+    decay: number;
+    hebbian: number;
+    traceActivation: number;
+  };
 }
 
 export class MemoryRetriever {
@@ -73,9 +80,15 @@ export class MemoryRetriever {
       }
     }
 
-    // Sort descending by score
-    scoredList.sort((a, b) => b.score - a.score);
-    return scoredList.slice(0, limit);
+    // Neuromorphic re-scoring (plasticity) when enabled. Falls back to
+    // plain TF-IDF ordering when disabled.
+    const neuro = getNeuromorphicMemory(this.store.db);
+    neuro.ensureSchema();
+    const now = new Date().toISOString();
+    const ranked = neuro.isEnabled()
+      ? neuro.applyScoring(scoredList as any, limit, now)
+      : scoredList.sort((a, b) => b.score - a.score);
+    return (ranked as RetrievedMemory[]).slice(0, limit);
   }
 
   public tokenize(text: string): string[] {
