@@ -765,8 +765,89 @@ Candidate Rules:    ${stats.candidateRules}
         return await this.handleSmartWriting(arg, options);
       }
 
+      case "/mcp":
+      case "/mcp-status":
+      case "/mcp-list":
+      case "/mcp-servers":
+      case "/mcp-tools":
+      case "/mcp-reconnect":
+      case "/mcp-call":
+      case "/mcp-enable":
+      case "/mcp-disable":
+        return await this.handleMcpCommand(cmdText);
+
       default:
         return `Unknown command "${cmd}". Type /help for available commands.`;
+    }
+  }
+
+  private getMcpSettings(): Record<string, unknown> {
+    const db = this.getDatabase();
+    const enabled = db.getSetting("mcp_enabled");
+    const cfgPath = db.getSetting("mcp_config_path");
+    const timeout = db.getSetting("mcp_timeout_ms");
+    return {
+      mcp_enabled: enabled ?? "true",
+      mcp_config_path: cfgPath ?? "mcp_servers.json",
+      mcp_timeout_ms: timeout ?? 15000,
+    };
+  }
+
+  private async handleMcpCommand(cmdText: string): Promise<string> {
+    const { parseMcpInput, getMcpManager, formatMcpStatus, formatMcpTools, loadMcpConfig, saveMcpConfig, listMcpServers, ensureMcpConfig } = await import("../mcp.ts");
+    const parsed = parseMcpInput(cmdText);
+    if (!parsed) return "Unknown MCP command. Type /help for available commands.";
+    const settings = this.getMcpSettings();
+    const mgr = getMcpManager();
+    switch (parsed.action) {
+      case "status": {
+        const status = await mgr.getStatus(settings as any);
+        return formatMcpStatus(status);
+      }
+      case "list": {
+        const cfg: any = ensureMcpConfig(settings as any);
+        const servers = listMcpServers(cfg);
+        if (!servers.length) return "No MCP servers configured.";
+        return servers.map((s: any) => `${s.name}: ${s.disabled ? "disabled" : "enabled"} (${s.command})`).join("\\n");
+      }
+      case "tools": {
+        let tools = await mgr.listTools(settings as any, { force: true });
+        if (parsed.server) {
+            tools = tools.filter((t: any) => String(t.function.name).startsWith(`${parsed.server}__`));
+        }
+        return formatMcpTools(tools);
+      }
+      case "reconnect": {
+        const msgs = await mgr.reconnect(parsed.server, settings as any);
+        return msgs.join("\\n");
+      }
+      case "call": {
+        if (!parsed.tool) return "Usage: /mcp-call <server__tool> [json_args]";
+        let args = {};
+        if (parsed.argsJson) {
+            try { args = JSON.parse(parsed.argsJson); } catch (e: any) { return `Invalid JSON args: ${e?.message || e}`; }
+        }
+        const out = await mgr.callTool(parsed.tool, args, settings as any);
+        return out;
+      }
+      case "enable":
+      case "disable": {
+        if (!parsed.server) return `Usage: /mcp-${parsed.action} <server>`;
+        const cfg: any = ensureMcpConfig(settings as any);
+        const servers = listMcpServers(cfg);
+        const srv = servers.find((s: any) => s.name === parsed.server);
+        if (!srv) return `Unknown server: ${parsed.server}`;
+        // mutate config object
+        const raw = (cfg.mcpServers || cfg.mcpServers);
+        if (raw && raw[parsed.server]) {
+            raw[parsed.server].disabled = parsed.action === "disable";
+            if (parsed.action === "enable") delete raw[parsed.server].disabled;
+        }
+        saveMcpConfig(cfg, (settings as any).mcp_config_path);
+        return `${parsed.server} ${parsed.action}d.`;
+      }
+      default:
+        return "Unknown MCP action.";
     }
   }
 

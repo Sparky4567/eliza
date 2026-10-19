@@ -438,6 +438,45 @@ for an isolated in-memory DB.
 
 ---
 
+
+---
+
+## 🔌 MCP (Model Context Protocol) support
+
+eliza can both **act as an MCP server** (expose itself to other MCP-capable
+assistants) and **act as an MCP client** (connect to external MCP servers and
+use their tools).
+
+### MCP server mode
+
+Run `bun run mcp` (or `bun run src/index.ts --mcp`) to expose eliza as an MCP
+server (stdio + HTTP/SSE) for any MCP-capable assistant.
+
+- HTTP Streamable endpoint: `http://0.0.0.0:${MCP_PORT:-8790}/mcp`
+- Legacy SSE endpoint: `http://0.0.0.0:${MCP_PORT:-8790}/sse`
+- Health: `http://0.0.0.0:${MCP_PORT:-8790}/health`
+- Set `MCP_PORT` to change the port.
+- Set `MCP_TOKEN` or `settings.mcp_server_token` to require `Authorization: Bearer <token>`.
+- Use `--mcp-stdio-only` for pure stdio mode (local desktop assistants).
+
+### MCP client
+
+eliza ships a zero-dependency MCP stdio client (`src/mcp.ts`) compatible with
+Claude-desktop style `mcp_servers.json` configs. On first run, `mcp_servers.json`
+is auto-created with the built-in `local` (offline `ping` / `read_file` /
+`list_directory`) and `web` (live `web_search` / `web_fetch`) servers.
+
+Commands:
+- `/mcp-status` (or `/mcp`) — show enabled state, configured servers, and connection state.
+- `/mcp-list` — list configured MCP servers.
+- `/mcp-tools [server]` — list tools (addressed as `<server>__<tool>`).
+- `/mcp-call <server__tool> [json_args]` — call a tool directly.
+- `/mcp-reconnect [server]` — drop cached connections.
+- `/mcp-enable <server>` / `/mcp-disable <server>` — toggle a server.
+
+Settings (persisted in the DB / env): `mcp_enabled` (default on),
+`mcp_config_path`, `mcp_timeout_ms` (default 15000).
+
 ## 📄 License
 
 MIT — see [LICENSE](./LICENSE).

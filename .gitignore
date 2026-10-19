@@ -13,6 +13,9 @@ whatsapp_bridge/node_modules/
 
 # Environment files
 .env
+
+# MCP server config (auto-generated)
+mcp_servers.json
 .env.local
 .env.*.local
 

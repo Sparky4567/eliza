@@ -194,6 +194,20 @@ export async function startChannels(bot: ConversationBot, opts: CliOptions): Pro
 
 /** Entrypoint: CLI REPL by default, web UI + API with --web (like zap's server mode). */
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+  // MCP server mode: expose eliza as an MCP server (stdio + HTTP) and skip
+  // the interactive CLI REPL.
+  if (argv.includes("--mcp") || argv.includes("--mcp-stdio-only") || argv.includes("--mcp-http-only")) {
+    const { startMcpServer } = await import("./mcp_server.ts");
+    const httpOnly = argv.includes("--mcp-http-only");
+    const stdioOnly = argv.includes("--mcp-stdio-only");
+    await startMcpServer({
+      http: !stdioOnly,
+      stdio: !httpOnly,
+    });
+    await new Promise(() => {});
+    return;
+  }
+
   const opts = parseCliArgs(argv);
   if (opts.web) {
     const port = opts.port ?? defaultConfig.web.port;
