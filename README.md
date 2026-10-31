@@ -24,6 +24,7 @@ A modular, incrementally learning conversational AI built with **Bun** and **Typ
 - **Channels panel in the web UI**: Side-panel card showing Telegram/WhatsApp status, the WhatsApp pairing QR inline, runtime Telegram connect (paste a token, no restart), auth reset, and outbound test-message senders (`/api/channels*`).
 - **Persistent settings (model + Telegram token)**: The last-picked Ollama model and the Telegram bot token are saved in the SQLite `settings` table, survive restarts, and can be edited or deleted from the web UI (Model panel + Channels panel), via the API, or via `/model` / `--telegram-token`.
 - **Editable system template / persona**: The system prompt is now an editable template stored in the `settings` table; change ELIZA's persona on demand from the CLI (`/system …`), web API (`/api/system`), Telegram/WhatsApp, or MCP, and it persists across restarts on every surface.
+- **Lively, creative persona presets**: The default persona is now a warm, lively, creative companion (less mirroring/psychoanalyst) instead of a purely reflective analyst. Switch voices instantly with `/system preset <name>` (`analyst`, `lively`, `creative`, `companion`) or `/system <name>`, or set a fully custom template; the seeded ELIZA rules were also reworded to be more engaging and interactive.
 - **Command prefix flexibility**: Slash commands can be invoked with either `/` or `@` (e.g. `/help` or `@help`) on all surfaces.
 - **Continuous evolution pass**: `/evolve` (and `/learn`, `/auto-learn`, …) runs a consolidation pass over neuromorphic memory, auto-approves matured candidate rules, and reinforces recent learning on demand.
 - **Resilient LLM Layer**: Clear timeout errors (no more cryptic `The operation was aborted`), best-effort background learning that never breaks a reply, graceful ELIZA fallback, and a Ctrl+C-safe CLI loop.
@@ -281,7 +282,7 @@ Notes:
 | `/rules` | `[status]` | Lists ELIZA rules (`approved`, `candidate`, `rejected`, `all`). |
 | `/approve` | `<id>` | Approves a learned candidate rule and activates it in the ELIZA engine. |
 | `/reload` | — | Reloads rule definitions from `data/rules.json` and database. |
-| `/system` | `[text \| reset]` | View, replace, or reset the editable system template / persona (aliases: `/persona`, `/template`, `/prompt`; also `@system`). |
+| `/system` | `[text \| reset \| preset <name>]` | View, replace, or reset the editable system template / persona. Apply a named preset (`analyst`, `lively`, `creative`, `companion`) via `/system preset <name>` or `/system <name>` (aliases: `/persona`, `/template`, `/prompt`; also `@system`). |
 | `/evolve` | — | Run a continuous-learning evolution pass: consolidate/prune neuromorphic memory and auto-approve matured candidate rules (aliases: `/learn`, `/auto-learn`, `/continuous-learning`; also `@evolve`). |
 | `/smart-writing` | `start · add · continue · improve · show · save · list · links · done` | Ollama-only co-writing session: iterative continuation/improvement + persistent save with memory linking (aliases: `/smart-write`, `/write`, `/story`). |
 | `/clear` | — | Clears current conversation history and starts a new session. |

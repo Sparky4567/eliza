@@ -6,6 +6,7 @@ import type { ResponseEvaluator, EvaluationResult } from "./evaluator.ts";
 import type { RetrievedMemory } from "../memory/retrieval.ts";
 import type { RetrievedKnowledge } from "../knowledge/retrieval.ts";
 import type { BotDatabase } from "../db/database.ts";
+import { getPersonaPreset, listPersonaPresets } from "../llm/prompts.ts";
 
 export type ResponseStrategyType = "eliza_rule" | "llm_contextual" | "eliza_fallback" | "generic_fallback";
 
@@ -87,6 +88,20 @@ export class ResponseEngine {
 
   public resetPersona(): string {
     return this.contextBuilder.resetPersona();
+  }
+
+  public getPersonaPreset(name: string): string | null {
+    return getPersonaPreset(name);
+  }
+
+  public listPersonaPresets(): string[] {
+    return listPersonaPresets();
+  }
+
+  public setPersonaPreset(name: string): string {
+    const preset = getPersonaPreset(name);
+    if (!preset) throw new Error(`Unknown persona preset: ${name}`);
+    return this.setSystemPrompt(preset);
   }
 
   public getSystemPromptTemplate(): string { return this.contextBuilder.getSystemPrompt(); }

@@ -11,7 +11,7 @@ import type { ResponseEngine, ResponseTrace } from "./response.ts";
 import type { LearningPipeline } from "../knowledge/learning.ts";
 import type { OllamaClient } from "../llm/ollama.ts";
 import type { BotConfig } from "../config.ts";
-import { SYSTEM_PROMPT } from "../llm/prompts.ts";
+import { SYSTEM_PROMPT, getPersonaPreset, listPersonaPresets } from "../llm/prompts.ts";
 import { SmartWritingManager } from "../writing/smart-writing.ts";
 import { getNeuromorphicMemory } from "../memory/neuromorphic_memory.ts";
 
@@ -210,6 +210,20 @@ export class ConversationBot {
       }
     }
     return value;
+  }
+
+  public getPersonaPreset(name: string): string | null {
+    return getPersonaPreset(name);
+  }
+
+  public listPersonaPresets(): string[] {
+    return listPersonaPresets();
+  }
+
+  public setPersonaPreset(name: string): string {
+    const preset = getPersonaPreset(name);
+    if (!preset) throw new Error(`Unknown persona preset: ${name}`);
+    return this.setSystemPrompt(preset);
   }
 
   public resetSystemTemplate(): string {
@@ -986,11 +1000,27 @@ Candidate Rules:    ${stats.candidateRules}
         const first = (remainder.split(/\s+/)[0] || "").toLowerCase();
         if (!remainder || first === "show" || first === "status" || first === "view") {
           const cur = this.getSystemPrompt();
-          return `=== System Template / Persona ===\n${cur}\n\nUse /system <text> to replace, /system reset to restore default.`;
+          return `=== System Template / Persona ===\n${cur}\n\nPresets: ${this.listPersonaPresets().join(", ")}\nUse /system <text> to replace, /system preset <name> to apply a preset, /system reset to restore default.`;
         }
         if (first === "reset" || first === "default" || first === "clear") {
           const v = this.resetSystemPrompt();
           return `System template reset to default.\n${v}`;
+        }
+        if (first === "preset" || first === "presets" || first === "list") {
+          const name = remainder.split(/\s+/).slice(1).join(" ").trim();
+          if (!name) {
+            return `Available persona presets: ${this.listPersonaPresets().join(", ")}\nUsage: /system preset <name>`;
+          }
+          try {
+            const v = this.setPersonaPreset(name);
+            return `Persona preset "${name}" applied.\nActive persona:\n${v}`;
+          } catch (err: any) {
+            return `Unknown persona preset "${name}". Available: ${this.listPersonaPresets().join(", ")}`;
+          }
+        }
+        if (!remainder.includes(" ") && this.getPersonaPreset(remainder)) {
+          const v = this.setPersonaPreset(remainder);
+          return `Persona preset "${remainder}" applied.\nActive persona:\n${v}`;
         }
         this.setSystemPrompt(remainder);
         return `System template updated.\nActive persona:\n${this.getSystemPrompt()}`;

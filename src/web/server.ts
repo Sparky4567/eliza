@@ -160,9 +160,25 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
       template: bot.getSystemTemplate(),
       persona: bot.getPersona(),
       persisted: bot.getPersistedSystemPrompt(),
+      presets: bot.listPersonaPresets(),
     }),
     POST: async (req: Request) => {
       const body = await readJson(req);
+      const presetName = String(body.preset ?? body.personaPreset ?? body.persona_preset ?? "").trim();
+      if (presetName) {
+        try {
+          const value = bot.setPersonaPreset(presetName);
+          return Response.json({
+            ok: true,
+            preset: presetName,
+            prompt: value,
+            template: bot.getSystemTemplate(),
+            persona: bot.getPersona(),
+          });
+        } catch (e: any) {
+          return Response.json({ error: String(e?.message ?? e) }, { status: 400 });
+        }
+      }
       const template = String(
         body.prompt ?? body.template ?? body.persona ?? body.systemPrompt ?? body.systemTemplate ?? body.text ?? ""
       ).trim();

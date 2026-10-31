@@ -1,7 +1,7 @@
 import type { MemoryRetriever, RetrievedMemory } from "../memory/retrieval.ts";
 import type { KnowledgeRetriever, RetrievedKnowledge } from "../knowledge/retrieval.ts";
 import type { ChatMessage } from "../llm/ollama.ts";
-import { SYSTEM_PROMPT } from "../llm/prompts.ts";
+import { SYSTEM_PROMPT, getPersonaPreset, listPersonaPresets } from "../llm/prompts.ts";
 
 export interface ContextOptions {
   maxMemories?: number;
@@ -89,6 +89,20 @@ export class ContextBuilder {
 
   public resetPersona(): string {
     return this.resetSystemPrompt();
+  }
+
+  public getPersonaPreset(name: string): string | null {
+    return getPersonaPreset(name);
+  }
+
+  public listPersonaPresets(): string[] {
+    return listPersonaPresets();
+  }
+
+  public setPersonaPreset(name: string): string {
+    const preset = getPersonaPreset(name);
+    if (!preset) throw new Error(`Unknown persona preset: ${name}`);
+    return this.setSystemPrompt(preset);
   }
 
   public getSystemPromptTemplate(): string { return this.getSystemPrompt(); }

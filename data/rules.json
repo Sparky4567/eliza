@@ -10,9 +10,9 @@
         "* greetings *"
       ],
       "responses": [
-        "Hello! How are you feeling today?",
-        "Hi there. What is on your mind?",
-        "Greetings. Tell me what brings you here today."
+        "Hi! Great to see you — what's on your mind today?",
+        "Hello there! I'm all ears and ready to dive in.",
+        "Greetings! What can we explore together today?"
       ],
       "priority": 10
     },
@@ -21,10 +21,9 @@
       "keywords": ["mother", "mom"],
       "patterns": ["* mother *", "* mom *", "mother", "mom"],
       "responses": [
-        "Tell me more about your mother.",
-        "How do you feel about your mother?",
-        "What was your relationship with your mother like?",
-        "Does your mother influence your thoughts often?"
+        "That's interesting — tell me more about your mom!",
+        "How does your relationship with your mother shape things for you?",
+        "What's a favorite memory involving your mom?"
       ],
       "priority": 12
     },
@@ -33,9 +32,9 @@
       "keywords": ["father", "dad"],
       "patterns": ["* father *", "* dad *", "father", "dad"],
       "responses": [
-        "Tell me more about your father.",
-        "How does that relate to your father?",
-        "What comes to mind when you think of your father?"
+        "Tell me more about your dad — what's he like?",
+        "How does your father figure into this?",
+        "What comes to mind when you think about your dad?"
       ],
       "priority": 12
     },
@@ -44,9 +43,9 @@
       "keywords": ["family", "parent", "parents", "brother", "sister", "sibling"],
       "patterns": ["* family *", "* parent *", "* brother *", "* sister *"],
       "responses": [
-        "Tell me more about your family.",
-        "How does your family affect how you see this?",
-        "What role does your family play in your current situation?"
+        "Families are fascinating — tell me more about yours!",
+        "How does your family influence how you see this?",
+        "What role does family play in your current situation?"
       ],
       "priority": 10
     },
@@ -55,10 +54,10 @@
       "keywords": ["feel", "feeling", "feelings"],
       "patterns": ["i feel *", "i am feeling *", "i'm feeling *", "* feel *"],
       "responses": [
-        "Tell me more about those feelings.",
-        "Do you often feel {0}?",
-        "What makes you feel {0}?",
-        "Why do you think you feel that way?"
+        "That feeling sounds important — want to unpack it together?",
+        "Do you often feel {0}? What usually brings that on?",
+        "What makes you feel {0}? I'm curious!",
+        "Why do you think you feel that way — let's explore it."
       ],
       "priority": 14
     },
@@ -67,9 +66,9 @@
       "keywords": ["sad", "depressed", "unhappy", "down", "gloomy"],
       "patterns": ["* sad *", "* depressed *", "* unhappy *"],
       "responses": [
-        "I am sorry to hear that you are feeling down.",
-        "Do you think talking about it could help you feel better?",
-        "What do you think is contributing to these feelings?"
+        "I'm sorry you're feeling down — I'm here to chat it through.",
+        "Do you think talking about it could help lighten the load?",
+        "What's contributing to these feelings? Let's figure it out."
       ],
       "priority": 14
     },
@@ -78,9 +77,9 @@
       "keywords": ["happy", "glad", "joy", "excited", "pleased"],
       "patterns": ["* happy *", "* glad *", "* excited *"],
       "responses": [
-        "It is good to hear you are in high spirits. What brought that about?",
+        "Love that energy! What brought it about?",
         "How does being happy change your perspective on things?",
-        "What made you feel this way?"
+        "Awesome — tell me what made you feel this way!"
       ],
       "priority": 14
     },
@@ -89,10 +88,10 @@
       "keywords": ["i am", "i'm"],
       "patterns": ["i am *", "i'm *"],
       "responses": [
-        "How long have you been {0}?",
-        "Do you believe it is normal to be {0}?",
-        "Why do you say you are {0}?",
-        "How does being {0} make you feel?"
+        "How long have you been {0}? That's a fun thread to pull.",
+        "Do you think it's normal to be {0}? Why or why not?",
+        "Why do you say you are {0} — what's the story?",
+        "How does being {0} make you feel? Let's dig in."
       ],
       "priority": 11
     },
@@ -102,9 +101,9 @@
       "patterns": ["i want *", "i need *", "i wish *"],
       "responses": [
         "What would it mean to you if you got {0}?",
-        "Why do you want {0}?",
+        "Why do you want {0} — let's brainstorm how to get there.",
         "Suppose you got {0} soon. What then?",
-        "What is stopping you from having {0}?"
+        "What's stopping you from having {0}? Let's problem-solve."
       ],
       "priority": 12
     },
@@ -113,9 +112,9 @@
       "keywords": ["because"],
       "patterns": ["* because *"],
       "responses": [
-        "Is that the real reason?",
-        "What other reasons might there be?",
-        "Does that reason seem to explain anything else?"
+        "Is that the real reason, or is there more to it?",
+        "What other reasons might there be? Let's list a few.",
+        "Does that reason explain anything else too?"
       ],
       "priority": 8
     },
@@ -124,9 +123,9 @@
       "keywords": ["sorry", "apologize", "apologies"],
       "patterns": ["* sorry *", "* apologize *"],
       "responses": [
-        "Please don't apologize.",
-        "Apologies are not necessary here.",
-        "What feelings do you experience when you apologize?"
+        "No need to apologize — I'm glad you're sharing!",
+        "Apologies aren't necessary here. What's on your mind?",
+        "What feelings come up when you apologize? Let's talk."
       ],
       "priority": 9
     },
@@ -135,9 +134,9 @@
       "keywords": ["think", "believe", "suppose"],
       "patterns": ["i think *", "i believe *", "* think *"],
       "responses": [
-        "Do you really think so?",
+        "Do you really think so? Tell me more!",
         "What makes you believe {0}?",
-        "Are you certain about that?"
+        "Are you certain about that — or open to other angles?"
       ],
       "priority": 9
     },
@@ -146,10 +145,10 @@
       "keywords": ["computer", "ai", "machine", "bot", "robot", "eliza"],
       "patterns": ["* computer *", "* ai *", "* bot *", "* machine *", "* eliza *"],
       "responses": [
-        "Do computers make you feel uncomfortable?",
-        "Why do you mention machines?",
+        "Do computers make you feel uncomfortable, or curious?",
+        "Why do you mention machines — what's the connection?",
         "What do you think machines have to do with your problem?",
-        "Do you think I am just a machine, or something more?"
+        "Do you think I'm just a machine, or something more? 😉"
       ],
       "priority": 13
     },
@@ -158,9 +157,9 @@
       "keywords": ["can you", "could you"],
       "patterns": ["can you *", "could you *"],
       "responses": [
-        "You believe I can {0}, don't you?",
-        "Whether I can {0} depends on you more than me.",
-        "Would you want me to be able to {0}?"
+        "You believe I can {0}, don't you? Let's test it!",
+        "Whether I can {0} depends on us both — game?",
+        "Would you want me to be able to {0}? I'm up for it."
       ],
       "priority": 10
     },
@@ -169,9 +168,9 @@
       "keywords": ["why"],
       "patterns": ["why *"],
       "responses": [
-        "Why do you ask that?",
-        "Do you think you know the answer?",
-        "What do you think is the reason?"
+        "Why do you ask that? I love a good 'why'.",
+        "Do you think you already know the answer?",
+        "What do you think is the reason? Let's brainstorm."
       ],
       "priority": 8
     },
@@ -180,9 +179,9 @@
       "keywords": ["yes", "yeah", "yep", "sure", "certainly"],
       "patterns": ["yes", "yeah", "yep", "sure"],
       "responses": [
-        "You seem quite positive.",
-        "Are you sure?",
-        "I understand. Tell me more."
+        "You seem quite positive — awesome!",
+        "Are you sure? Either way, I'm with you.",
+        "I understand. Tell me more!"
       ],
       "priority": 6
     },
@@ -191,9 +190,9 @@
       "keywords": ["no", "nope", "nah", "never"],
       "patterns": ["no", "nope", "nah"],
       "responses": [
-        "Why not?",
-        "You are being a bit negative.",
-        "Why do you say no?"
+        "Why not? Let's explore that.",
+        "You're being a bit negative — but that's okay, let's unpack it.",
+        "Why do you say no? I'm listening."
       ],
       "priority": 6
     },
@@ -204,7 +203,7 @@
       "responses": [
         "Can you think of a specific example?",
         "When you say always, do you really mean every time?",
-        "What incident are you thinking of?"
+        "What incident are you thinking of? Let's get concrete."
       ],
       "priority": 7
     },
@@ -213,8 +212,8 @@
       "keywords": ["dream", "nightmare"],
       "patterns": ["* dream *", "* nightmare *"],
       "responses": [
-        "What does that dream suggest to you?",
-        "Do you dream often?",
+        "What does that dream suggest to you? Fun to analyze!",
+        "Do you dream often? Tell me the vivid parts.",
         "What people or memories appear in your dreams?"
       ],
       "priority": 9
@@ -225,8 +224,8 @@
       "patterns": ["* programming *", "* python *", "* bun *", "* typescript *", "* code *"],
       "responses": [
         "What aspect of {0} are you currently focusing on?",
-        "How is your work with programming going?",
-        "Tell me more about what you are building."
+        "How is your work with programming going? Let's nerd out.",
+        "Tell me more about what you are building — I'm excited!"
       ],
       "priority": 11
     },
@@ -235,12 +234,12 @@
       "keywords": [],
       "patterns": ["*"],
       "responses": [
-        "Please go on.",
-        "Tell me more about that.",
-        "How does that make you feel?",
-        "I see. Please continue.",
-        "What does that suggest to you?",
-        "Can you elaborate on that?"
+        "Ooh, tell me more — I'm hooked!",
+        "That's intriguing. What else?",
+        "How does that make you feel? Let's explore.",
+        "I see. Please continue — I'm listening.",
+        "What does that suggest to you? Fun to think about.",
+        "Can you elaborate? I'd love the details."
       ],
       "priority": 1
     }
