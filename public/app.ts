@@ -362,6 +362,73 @@ async function refreshModelPanel() {
 void refreshModelPanel();
 
 // ---------------------------------------------------------------------------
+// System template / Persona panel: view, edit, and reset the editable system
+// prompt (persona) that is persisted in the settings table. Mirrors the
+// model panel pattern; talks to /api/system (GET/POST/DELETE).
+// ---------------------------------------------------------------------------
+const systemPanelEl = $("systemPanel");
+
+function systemMsg(text: string, cls = "") {
+  const el = $("systemMsg") as HTMLElement | null;
+  if (!el) return;
+  el.textContent = text;
+  el.className = `ch-msg ${cls}`;
+}
+
+async function refreshSystemPanel() {
+  try {
+    const res = await fetch("/api/system");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = (await res.json()) as any;
+    const current = String(j.template ?? j.prompt ?? "");
+    const persisted = j.persisted ? String(j.persisted) : "";
+    systemPanelEl.innerHTML =
+      `<div class="ch-sub">active: <code>${esc(current.slice(0, 140))}${current.length > 140 ? "…" : ""}</code>${persisted ? " · stored override present" : " · using default"}</div>` +
+      `<textarea id="systemTemplateText" rows="8" spellcheck="false">${esc(current)}</textarea>` +
+      `<div class="ch-actions"><button id="systemSave">Save & apply</button><button id="systemReset">Reset to default</button><button id="systemRefresh">Refresh</button></div>` +
+      `<div class="ch-msg" id="systemMsg"></div>`;
+    ($("systemSave") as HTMLButtonElement).onclick = async () => {
+      const ta = $("systemTemplateText") as HTMLTextAreaElement | null;
+      const text = (ta?.value ?? "").trim();
+      if (!text) { systemMsg("template cannot be empty", "err"); return; }
+      systemMsg("saving…");
+      try {
+        const r = await fetch("/api/system", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ template: text }),
+        });
+        const jj = (await r.json()) as any;
+        if (!r.ok) throw new Error(jj.error ?? `HTTP ${r.status}`);
+        systemMsg("saved ✓ persona updated", "ok");
+        const ta2 = $("systemTemplateText") as HTMLTextAreaElement | null;
+        if (ta2) ta2.value = String(jj.template ?? text);
+      } catch (e: any) {
+        systemMsg(`save failed: ${e?.message ?? e}`, "err");
+      }
+    };
+    ($("systemReset") as HTMLButtonElement).onclick = async () => {
+      systemMsg("resetting…");
+      try {
+        const r = await fetch("/api/system", { method: "DELETE" });
+        const jj = (await r.json()) as any;
+        if (!r.ok) throw new Error(jj.error ?? `HTTP ${r.status}`);
+        const ta2 = $("systemTemplateText") as HTMLTextAreaElement | null;
+        if (ta2) ta2.value = String(jj.prompt ?? "");
+        systemMsg("reset to default ✓", "ok");
+      } catch (e: any) {
+        systemMsg(`reset failed: ${e?.message ?? e}`, "err");
+      }
+    };
+    ($("systemRefresh") as HTMLButtonElement).onclick = () => { void refreshSystemPanel(); };
+  } catch {
+    systemPanelEl.innerHTML = "<span style='color:var(--dim)'>system template info unavailable</span>";
+  }
+}
+
+void refreshSystemPanel();
+
+// ---------------------------------------------------------------------------
 // Channels panel: Telegram + WhatsApp status, runtime connect, QR pairing,
 // and outbound test messages. Same bot + memory as the chat beside it.
 // ---------------------------------------------------------------------------

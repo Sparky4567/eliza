@@ -325,6 +325,7 @@ Same bot, browser-hosted — modeled on zap's `Bun.serve` + WebSocket server:
 | Command | `POST /api/command {"command":"/stats"}` | Explicit slash-command dispatch → `{output}` |
 | Stats / Trace | `GET /api/stats`, `GET /api/trace` | Same data as CLI `/stats`, `/trace` |
 | Model | `GET /api/model`, `POST /api/model {"name"}`, `DELETE /api/model` | Inspect / switch the active Ollama model (POST persists the pick as `savedModel`); DELETE forgets the saved pick (falls back to auto-detect / rules) |
+| System template / Persona | `GET /api/system`, `POST /api/system {"prompt"\|"template"\|"persona"}`, `DELETE /api/system` | View, replace, or reset the editable system template / persona (persisted in the `settings` table); also available as `/system` in the CLI and as `get_system_prompt` / `set_system_prompt` over MCP |
 | Memory / Knowledge | `GET /api/memory?q=`, `GET /api/knowledge?q=` | Same output as CLI `/memory`, `/knowledge` |
 | Writing | `GET /api/writing?action=status\|show\|list\|links`, `POST /api/writing {"action","text"}` | Smart-writing session state, saved-story library, and association graph |
 | Channels | `GET /api/channels` | Telegram/WhatsApp summary (`configured`/`persisted`/`preview`/`running`/`username`, ports — only a masked `••••abcd` preview, never the full token) |

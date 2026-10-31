@@ -49,6 +49,12 @@
   #modelPanel input[type=text], #modelPanel select { width:100%; background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:7px 10px; color:var(--txt); font-size:13px; }
   #modelPanel .ch-msg { font-size:12px; min-height:16px; }
   #modelPanel .ch-msg.ok { color:var(--ok); } #modelPanel .ch-msg.err { color:#f85149; }
+  #systemPanel textarea { width:100%; background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:7px 10px; color:var(--txt); font-size:13px; font-family:ui-monospace,Menlo,Consolas,monospace; resize:vertical; min-height:90px; }
+  #systemPanel .ch-msg { font-size:12px; min-height:16px; }
+  #systemPanel .ch-msg.ok { color:var(--ok); } #systemPanel .ch-msg.err { color:#f85149; }
+  #systemPanel .ch-sub { color:var(--dim); font-size:12px; }
+  #systemPanel .ch-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  #systemPanel .ch-actions button { padding:5px 10px; font-size:12px; }
   #channels .ch-block { border:1px solid var(--line); border-radius:8px; padding:9px 10px; display:flex; flex-direction:column; gap:7px; }
   #channels .ch-title { font-weight:600; font-size:13px; }
   #channels .ch-sub { color:var(--dim); font-size:12px; }
@@ -96,6 +102,8 @@
     <div id="backend" style="font-size:13px;color:var(--dim)">…</div>
     <h2 style="margin-top:14px">Model</h2>
     <div id="modelPanel" style="font-size:13px;display:flex;flex-direction:column;gap:8px"><span style="color:var(--dim)">loading…</span></div>
+    <h2 style="margin-top:14px">System template / Persona</h2>
+    <div id="systemPanel" style="font-size:13px;display:flex;flex-direction:column;gap:8px"><span style="color:var(--dim)">loading…</span></div>
     <h2 style="margin-top:14px">Commands</h2>
     <div class="cmds" id="cmds">
       <button data-cmd="/stats">/stats</button>
@@ -103,6 +111,7 @@
       <button data-cmd="/memory">/memory</button>
       <button data-cmd="/knowledge">/knowledge</button>
       <button data-cmd="/model">/model</button>
+      <button data-cmd="/system">/system</button>
       <button data-cmd="/smart-writing help">✍️ writing</button>
       <button data-cmd="/help">/help</button>
     </div>
