@@ -268,7 +268,8 @@ Notes:
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
-| `/help` | — | Displays the interactive help menu. |
+| `/help` | — | Displays the interactive help menu. Aliases: `/commands`, `/get-commands` (also `@help`, `@commands`). |
+| `/mcp` | `status \| list \| tools [server] \| call <server__tool> [json] \| reconnect [server] \| enable <server> \| disable <server>` | Inspect and manage MCP (Model Context Protocol) servers/tools. Aliases: `/mcp-status`, `/mcp-list`, `/mcp-tools`, `/mcp-call`, `/mcp-reconnect`, `/mcp-enable`, `/mcp-disable`, `/mcp-servers` (also `@mcp`). |
 | `/model` | `[name]` | Shows available local models or switches the active model on the fly (e.g. `/model llama3.2`). The pick is saved in the DB and restored on restart. |
 | `/trace` | — | Displays detailed diagnostics on how the most recent response was constructed (matched patterns, retrieved memories, knowledge items, strategy, model, evaluation score, and notes). |
 | `/stats` | — | Shows database metrics (sessions, messages, active/superseded memories, knowledge, candidate rules, strategy scores). |
@@ -282,8 +283,8 @@ Notes:
 | `/rules` | `[status]` | Lists ELIZA rules (`approved`, `candidate`, `rejected`, `all`). |
 | `/approve` | `<id>` | Approves a learned candidate rule and activates it in the ELIZA engine. |
 | `/reload` | — | Reloads rule definitions from `data/rules.json` and database. |
-| `/system` | `[text \| reset \| preset <name>]` | View, replace, or reset the editable system template / persona. Apply a named preset (`analyst`, `lively`, `creative`, `companion`) via `/system preset <name>` or `/system <name>` (aliases: `/persona`, `/template`, `/prompt`; also `@system`). |
-| `/evolve` | — | Run a continuous-learning evolution pass: consolidate/prune neuromorphic memory and auto-approve matured candidate rules (aliases: `/learn`, `/auto-learn`, `/continuous-learning`; also `@evolve`). |
+| `/system` | `[text \| reset \| preset <name>]` | View, replace, or reset the editable system template / persona. Apply a named preset (`analyst`, `lively`, `creative`, `companion`) via `/system preset <name>` or `/system <name>` (aliases: `/persona`, `/template`, `/prompt`, `/system-prompt`, `/system-template`; also `@system`). |
+| `/evolve` | — | Run a continuous-learning evolution pass: consolidate/prune neuromorphic memory and auto-approve matured candidate rules (aliases: `/learn`, `/auto-learn`, `/continuous-learning`, `/evolve-memory`, `/learn-from-history`; also `@evolve`). |
 | `/smart-writing` | `start · add · continue · improve · show · save · list · links · done` | Ollama-only co-writing session: iterative continuation/improvement + persistent save with memory linking (aliases: `/smart-write`, `/write`, `/story`). |
 | `/clear` | — | Clears current conversation history and starts a new session. |
 | `/quit`, `/exit` | — | Exits the conversation cleanly. |
@@ -515,7 +516,7 @@ is auto-created with the built-in `local` (offline `ping` / `read_file` /
 
 Commands:
 - `/mcp-status` (or `/mcp`) — show enabled state, configured servers, and connection state.
-- `/mcp-list` — list configured MCP servers.
+- `/mcp-list` (or `/mcp-servers`) — list configured MCP servers.
 - `/mcp-tools [server]` — list tools (addressed as `<server>__<tool>`).
 - `/mcp-call <server__tool> [json_args]` — call a tool directly.
 - `/mcp-reconnect [server]` — drop cached connections.

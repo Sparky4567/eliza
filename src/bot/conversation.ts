@@ -722,9 +722,13 @@ export class ConversationBot {
 
     switch (cmd) {
       case "/help":
+      case "/commands":
+      case "/get-commands":
         return `
 === ELIZA Bot Commands ===
-  /help  (or @help)   Show this help guide
+All commands work with either "/" or "@" prefix (e.g. /help or @help).
+
+  /help  (or @help, /commands, /get-commands)   Show this help guide
   /model [name]       Show or switch the active local LLM model
   /quit, /exit        Exit the conversation loop
   /clear              Clear current session and reset context
@@ -738,10 +742,12 @@ export class ConversationBot {
   /rules [status]     Inspect rules (approved | candidate | all)
   /approve <id>       Approve a candidate rule to activate it
   /trace              Inspect full execution trace of the last turn
+  /neuromorphic [...] Inspect/control neuromorphic cognitive memory (alias /nc-mem)
   /reload             Reload rules from JSON file and database
-  /smart-writing ...  Co-write stories with Ollama (Ollama-only, see /smart-writing help)
-  /system [text]      View or replace the editable system template / persona (all surfaces)
-  /evolve             Run a continuous-learning evolution pass (memory + rules)
+  /smart-writing ...  Co-write stories with Ollama (aliases /smart-write, /write, /story)
+  /system [text]      View or replace the editable system template / persona (aliases /persona, /template, /prompt, /system-prompt, /system-template; presets analyst, lively, creative, companion)
+  /evolve             Run a continuous-learning evolution pass (aliases /learn, /auto-learn, /continuous-learning, /evolve-memory, /learn-from-history)
+  /mcp ...            MCP servers/tools (aliases /mcp-status, /mcp-list, /mcp-servers, /mcp-tools, /mcp-call, /mcp-reconnect, /mcp-enable, /mcp-disable)
 `.trim();
 
       case "/model": {
