@@ -47,6 +47,60 @@ export class ResponseEngine {
     return this.llm;
   }
 
+  /** Direct access to the context builder (used for editable system template / persona). */
+  public getContextBuilder(): ContextBuilder {
+    return this.contextBuilder;
+  }
+
+  public getSystemPrompt(): string {
+    return this.contextBuilder.getSystemPrompt();
+  }
+
+  public getSystemTemplate(): string {
+    return this.contextBuilder.getSystemTemplate();
+  }
+
+  public getPersona(): string {
+    return this.contextBuilder.getPersona();
+  }
+
+  public setSystemPrompt(template: string): string {
+    const value = this.contextBuilder.setSystemPrompt(template);
+    return value;
+  }
+
+  public setSystemTemplate(template: string): string {
+    return this.contextBuilder.setSystemTemplate(template);
+  }
+
+  public setPersona(template: string): string {
+    return this.contextBuilder.setPersona(template);
+  }
+
+  public resetSystemPrompt(): string {
+    return this.contextBuilder.resetSystemPrompt();
+  }
+
+  public resetSystemTemplate(): string {
+    return this.contextBuilder.resetSystemTemplate();
+  }
+
+  public resetPersona(): string {
+    return this.contextBuilder.resetPersona();
+  }
+
+  public getSystemPromptTemplate(): string { return this.contextBuilder.getSystemPrompt(); }
+  public setSystemPromptTemplate(template: string): string { return this.contextBuilder.setSystemPrompt(template); }
+  public resetSystemPromptTemplate(): string { return this.contextBuilder.resetSystemPrompt(); }
+
+  public getPrompt(): string { return this.contextBuilder.getSystemPrompt(); }
+  public setPrompt(template: string): string { return this.contextBuilder.setSystemPrompt(template); }
+  public resetPrompt(): string { return this.contextBuilder.resetSystemPrompt(); }
+
+  public getTemplate(): string { return this.contextBuilder.getSystemPrompt(); }
+  public setTemplate(template: string): string { return this.contextBuilder.setSystemPrompt(template); }
+  public resetTemplate(): string { return this.contextBuilder.resetSystemPrompt(); }
+
   public getLastTrace(): ResponseTrace | null {
     return this.lastTrace;
   }

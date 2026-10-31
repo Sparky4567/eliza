@@ -22,6 +22,9 @@ export const TOOLS = [
     { name: "remember", description: "Store a new memory.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
     { name: "web_search", description: "Search the web.", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer" }, provider: { type: "string" } }, required: ["query"] } },
     { name: "web_fetch", description: "Fetch a URL.", inputSchema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+    { name: "get_system_prompt", description: "Get the current system template / persona.", inputSchema: { type: "object", properties: {} } },
+    { name: "set_system_prompt", description: "Set the system template / persona.", inputSchema: { type: "object", properties: { prompt: { type: "string" }, template: { type: "string" }, persona: { type: "string" } }, required: [] } },
+    { name: "evolve", description: "Run a continuous-learning evolution pass.", inputSchema: { type: "object", properties: {} } },
 ];
 
 export class McpServerState {
@@ -91,6 +94,23 @@ export class McpServerState {
                 const settings = this.settingsFromEnv();
                 const res = await fetchPageText(url, settings);
                 return textResult(formatPageText(res));
+            }
+            case "get_system_prompt": {
+                return textResult(bot.getSystemPrompt());
+            }
+            case "set_system_prompt": {
+                const template = String(args.prompt ?? args.template ?? args.persona ?? args.text ?? "").trim();
+                if (!template) return { content: [{ type: "text", text: "prompt is required" }], isError: true };
+                try {
+                    const v = bot.setSystemPrompt(template);
+                    return textResult(v);
+                } catch (e: any) {
+                    return { content: [{ type: "text", text: String(e?.message ?? e) }], isError: true };
+                }
+            }
+            case "evolve": {
+                const res = await bot.evolve();
+                return textResult(JSON.stringify(res, null, 2));
             }
             default:
                 return { content: [{ type: "text", text: `Unknown tool: ${name}` }], isError: true };

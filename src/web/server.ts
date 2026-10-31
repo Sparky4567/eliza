@@ -49,6 +49,7 @@ async function health(bot: ConversationBot): Promise<Record<string, unknown>> {
     // Last-picked model saved in the DB (null when never picked) + whether
     // the active model came from that saved pick.
     savedModel: bot.getPersistedModel(),
+    systemPrompt: bot.getSystemPrompt(),
   };
 }
 
@@ -153,6 +154,58 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
   const port = opts.port ?? defaultConfig.web.port;
   const channels = opts.channels;
 
+  const systemRoute = {
+    GET: async () => Response.json({
+      prompt: bot.getSystemPrompt(),
+      template: bot.getSystemTemplate(),
+      persona: bot.getPersona(),
+      persisted: bot.getPersistedSystemPrompt(),
+    }),
+    POST: async (req: Request) => {
+      const body = await readJson(req);
+      const template = String(
+        body.prompt ?? body.template ?? body.persona ?? body.systemPrompt ?? body.systemTemplate ?? body.text ?? ""
+      ).trim();
+      if (!template) {
+        return Response.json({ error: "missing system template (POST {\"prompt\": \"...\"})" }, { status: 400 });
+      }
+      try {
+        bot.setSystemPrompt(template);
+      } catch (e: any) {
+        return Response.json({ error: String(e?.message ?? e) }, { status: 400 });
+      }
+      return Response.json({
+        ok: true,
+        prompt: bot.getSystemPrompt(),
+        template: bot.getSystemTemplate(),
+        persona: bot.getPersona(),
+      });
+    },
+    DELETE: async () => {
+      const value = bot.resetSystemPrompt();
+      return Response.json({ ok: true, cleared: true, prompt: value });
+    },
+  };
+
+  const evolveRoute = {
+    POST: async () => {
+      try {
+        const res = await bot.evolve();
+        return Response.json({ ok: true, ...res });
+      } catch (e: any) {
+        return Response.json({ error: String(e?.message ?? e) }, { status: 500 });
+      }
+    },
+    GET: async () => {
+      try {
+        const res = await bot.evolve();
+        return Response.json({ ok: true, ...res });
+      } catch (e: any) {
+        return Response.json({ error: String(e?.message ?? e) }, { status: 500 });
+      }
+    },
+  };
+
   const server = Bun.serve<ConnState>({
     port,
     routes: {
@@ -178,9 +231,10 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
       "/api/command": {
         POST: async (req: Request) => {
           const body = await readJson(req);
-          const command = String(body.command ?? "").trim().slice(0, 4000);
+          let command = String(body.command ?? "").trim().slice(0, 4000);
+          if (command.startsWith("@")) command = "/" + command.slice(1);
           if (!command.startsWith("/")) {
-            return Response.json({ error: "command must start with '/'" }, { status: 400 });
+            return Response.json({ error: "command must start with '/' or '@'" }, { status: 400 });
           }
           try {
             const output = await bot.handleCommand(command);
@@ -222,6 +276,20 @@ export async function startWebServer(bot: ConversationBot, opts: WebServerOption
           return Response.json({ ...(await health(bot)), cleared: true });
         },
       },
+      "/api/system": systemRoute,
+      "/api/system-prompt": systemRoute,
+      "/api/system-template": systemRoute,
+      "/api/persona": systemRoute,
+      "/api/template": systemRoute,
+      "/api/prompt": systemRoute,
+      "/api/system-template": systemRoute,
+      "/api/persona-template": systemRoute,
+      "/api/prompt-template": systemRoute,
+      "/api/persona-prompt": systemRoute,
+      "/api/evolve": evolveRoute,
+      "/api/learn": evolveRoute,
+      "/api/auto-learn": evolveRoute,
+      "/api/continuous-learning": evolveRoute,
       "/api/memory": {
         GET: async (req: Request) => {
           const q = new URL(req.url).searchParams.get("q") ?? "";

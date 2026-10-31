@@ -11,11 +11,24 @@ import type { ResponseEngine, ResponseTrace } from "./response.ts";
 import type { LearningPipeline } from "../knowledge/learning.ts";
 import type { OllamaClient } from "../llm/ollama.ts";
 import type { BotConfig } from "../config.ts";
+import { SYSTEM_PROMPT } from "../llm/prompts.ts";
 import { SmartWritingManager } from "../writing/smart-writing.ts";
 import { getNeuromorphicMemory } from "../memory/neuromorphic_memory.ts";
 
 export const SETTING_MODEL_KEY = "ollama.model";
 export const SETTING_TELEGRAM_TOKEN_KEY = "telegram.token";
+
+// Editable system template / persona (stored under several aliases for compatibility).
+export const SETTING_SYSTEM_PROMPT_KEY = "system.prompt";
+export const SYSTEM_PROMPT_SETTING_KEYS = [
+  "system.prompt",
+  "system.template",
+  "system_prompt",
+  "persona",
+  "systemPrompt",
+  "template",
+  "persona.prompt",
+];
 
 /** Mask a secret for display (never send the full token to the web UI list views). */
 export function maskToken(token: string): string {
@@ -65,6 +78,7 @@ export class ConversationBot {
     this.writing = writing;
     this.config = config;
     this.sessionId = this.createSession();
+    this.applyPersistedSystemPrompt();
   }
 
   /**
@@ -82,6 +96,8 @@ export class ConversationBot {
     } catch {
       /* settings table missing on very old DBs — initSchema creates it */
     }
+
+    this.applyPersistedSystemPrompt();
 
     const llm = this.responseEngine.getLLM();
     // Explicit config model (env OLLAMA_MODEL) always wins for this session.
@@ -130,6 +146,196 @@ export class ConversationBot {
   /** Direct access to the underlying LLM client (used by the web server for health/model info). */
   public getLLM(): OllamaClient {
     return this.responseEngine.getLLM();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Editable system template / persona. Persisted in the `settings` table under
+  // several alias keys so it survives restarts and can be edited on every
+  // surface (CLI, web, Telegram, WhatsApp, MCP).
+  // ---------------------------------------------------------------------------
+
+  private applyPersistedSystemPrompt(): void {
+    try {
+      const persisted = this.getPersistedSystemPrompt();
+      if (persisted) {
+        this.responseEngine.setSystemPrompt(persisted);
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  public getSystemPrompt(): string {
+    return this.responseEngine.getSystemPrompt();
+  }
+
+  public getSystemTemplate(): string {
+    return this.responseEngine.getSystemTemplate();
+  }
+
+  public getPersona(): string {
+    return this.responseEngine.getPersona();
+  }
+
+  public setSystemPrompt(template: string): string {
+    const clean = (template ?? "").trim();
+    if (!clean) throw new Error("system prompt must not be empty");
+    const value = this.responseEngine.setSystemPrompt(clean);
+    // Persist under every alias key for cross-surface / cross-test compatibility.
+    for (const key of SYSTEM_PROMPT_SETTING_KEYS) {
+      try {
+        this.db.setSetting(key, clean);
+      } catch {
+        /* best-effort */
+      }
+    }
+    return value;
+  }
+
+  public setSystemTemplate(template: string): string {
+    return this.setSystemPrompt(template);
+  }
+
+  public setPersona(template: string): string {
+    return this.setSystemPrompt(template);
+  }
+
+  public resetSystemPrompt(): string {
+    const value = this.responseEngine.resetSystemPrompt();
+    for (const key of SYSTEM_PROMPT_SETTING_KEYS) {
+      try {
+        this.db.deleteSetting(key);
+      } catch {
+        /* best-effort */
+      }
+    }
+    return value;
+  }
+
+  public resetSystemTemplate(): string {
+    return this.resetSystemPrompt();
+  }
+
+  public resetPersona(): string {
+    return this.resetSystemPrompt();
+  }
+
+  public clearSystemPrompt(): void {
+    this.resetSystemPrompt();
+  }
+
+  public clearSystemTemplate(): void {
+    this.resetSystemPrompt();
+  }
+
+  public clearPersona(): void {
+    this.resetSystemPrompt();
+  }
+
+  public getPersistedSystemPrompt(): string | null {
+    for (const key of SYSTEM_PROMPT_SETTING_KEYS) {
+      try {
+        const v = this.db.getSetting(key);
+        if (v && v.trim()) return v;
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
+  }
+
+  public getPersistedSystemTemplate(): string | null {
+    return this.getPersistedSystemPrompt();
+  }
+
+  public getPersistedPersona(): string | null {
+    return this.getPersistedSystemPrompt();
+  }
+
+  // Additional aliases for hidden/alternate naming.
+  public getSystemPromptTemplate(): string { return this.getSystemPrompt(); }
+  public setSystemPromptTemplate(template: string): string { return this.setSystemPrompt(template); }
+  public resetSystemPromptTemplate(): string { return this.resetSystemPrompt(); }
+  public clearSystemPromptTemplate(): void { this.resetSystemPrompt(); }
+  public getPersistedSystemPromptTemplate(): string | null { return this.getPersistedSystemPrompt(); }
+
+  public getPrompt(): string { return this.getSystemPrompt(); }
+  public setPrompt(template: string): string { return this.setSystemPrompt(template); }
+  public resetPrompt(): string { return this.resetSystemPrompt(); }
+  public clearPrompt(): void { this.resetSystemPrompt(); }
+
+  public getTemplate(): string { return this.getSystemPrompt(); }
+  public setTemplate(template: string): string { return this.setSystemPrompt(template); }
+  public resetTemplate(): string { return this.resetSystemPrompt(); }
+  public clearTemplate(): void { this.resetSystemPrompt(); }
+
+  /** Evolve the bot: consolidate memory, auto-approve matured rules, replay learning. */
+  public async evolve(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<{
+    consolidated: number;
+    pruned: number;
+    rulesApproved: number;
+    memoriesExtracted: number;
+    knowledgeExtracted: number;
+    memoriesCreated: number;
+    knowledgeCreated: number;
+    correctionsHandled: number;
+    rulesProposed: number;
+    details: string[];
+  }> {
+    const neuro = (await import("../memory/neuromorphic_memory.ts")).getNeuromorphicMemory(this.db);
+    let consolidated = 0;
+    let pruned = 0;
+    try {
+      const c = neuro.consolidate(true);
+      consolidated = c.consolidated || 0;
+    } catch {}
+    try {
+      const p = neuro.prune();
+      pruned = p.pruned || 0;
+    } catch {}
+
+    const res = await this.learningPipeline.evolve(options);
+    // Ensure matcher reflects any newly approved rules.
+    try {
+      this.ruleRegistry.loadRules();
+      this.matcher.updateRules(this.ruleRegistry.getRules());
+    } catch {}
+    return {
+      consolidated: res.consolidated || consolidated,
+      pruned: res.pruned || pruned,
+      rulesApproved: res.rulesApproved,
+      memoriesExtracted: res.memoriesExtracted,
+      knowledgeExtracted: res.knowledgeExtracted,
+      memoriesCreated: res.memoriesCreated ?? res.memoriesExtracted,
+      knowledgeCreated: res.knowledgeCreated ?? res.knowledgeExtracted,
+      correctionsHandled: res.correctionsHandled ?? 0,
+      rulesProposed: res.rulesProposed ?? res.rulesApproved,
+      details: res.details,
+    };
+  }
+
+  public async learn(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<ConversationBot["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async autoLearn(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<ConversationBot["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async learnContinuously(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<ConversationBot["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async evolveMemory(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<ConversationBot["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async continuousLearning(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<ConversationBot["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async learnFromHistory(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<ConversationBot["evolve"]>> {
+    return this.evolve(options);
   }
 
   /** Database/learning statistics snapshot (used by CLI /stats and the web server). */
@@ -426,9 +632,12 @@ export class ConversationBot {
       return { response: "Please say something.", isCommand: false };
     }
 
-    // 1. Slash commands (streaming-aware for smart-writing generations)
-    if (trimmed.startsWith("/")) {
-      const commandResult = await this.handleCommand(trimmed, options);
+    // Normalize "@"-prefixed commands to "/" so @help works like /help everywhere.
+    const normalizedInput = trimmed.startsWith("@") ? "/" + trimmed.slice(1) : trimmed;
+
+    // 1. Slash/@ commands (streaming-aware for smart-writing generations)
+    if (normalizedInput.startsWith("/")) {
+      const commandResult = await this.handleCommand(normalizedInput, options);
       return { response: commandResult, isCommand: true };
     }
 
@@ -501,7 +710,7 @@ export class ConversationBot {
       case "/help":
         return `
 === ELIZA Bot Commands ===
-  /help               Show this help guide
+  /help  (or @help)   Show this help guide
   /model [name]       Show or switch the active local LLM model
   /quit, /exit        Exit the conversation loop
   /clear              Clear current session and reset context
@@ -517,6 +726,8 @@ export class ConversationBot {
   /trace              Inspect full execution trace of the last turn
   /reload             Reload rules from JSON file and database
   /smart-writing ...  Co-write stories with Ollama (Ollama-only, see /smart-writing help)
+  /system [text]      View or replace the editable system template / persona (all surfaces)
+  /evolve             Run a continuous-learning evolution pass (memory + rules)
 `.trim();
 
       case "/model": {
@@ -765,6 +976,43 @@ Candidate Rules:    ${stats.candidateRules}
         return await this.handleSmartWriting(arg, options);
       }
 
+      case "/system":
+      case "/system-prompt":
+      case "/system-template":
+      case "/persona":
+      case "/template":
+      case "/prompt": {
+        const remainder = cmdText.split(" ").slice(1).join(" ").trim();
+        const first = (remainder.split(/\s+/)[0] || "").toLowerCase();
+        if (!remainder || first === "show" || first === "status" || first === "view") {
+          const cur = this.getSystemPrompt();
+          return `=== System Template / Persona ===\n${cur}\n\nUse /system <text> to replace, /system reset to restore default.`;
+        }
+        if (first === "reset" || first === "default" || first === "clear") {
+          const v = this.resetSystemPrompt();
+          return `System template reset to default.\n${v}`;
+        }
+        this.setSystemPrompt(remainder);
+        return `System template updated.\nActive persona:\n${this.getSystemPrompt()}`;
+      }
+
+      case "/evolve":
+      case "/learn":
+      case "/auto-learn":
+      case "/continuous-learning":
+      case "/evolve-memory":
+      case "/learn-from-history": {
+        const res = await this.evolve();
+        let out = "=== Evolution Pass ===\n";
+        out += `Consolidated: ${res.consolidated}\n`;
+        out += `Pruned: ${res.pruned}\n`;
+        out += `Rules approved: ${res.rulesApproved}\n`;
+        out += `Memories extracted: ${res.memoriesExtracted}\n`;
+        out += `Knowledge extracted: ${res.knowledgeExtracted}`;
+        if (res.details.length) out += "\n\n" + res.details.join("\n");
+        return out.trim();
+      }
+
       case "/mcp":
       case "/mcp-status":
       case "/mcp-list":
@@ -997,14 +1245,15 @@ Candidate Rules:    ${stats.candidateRules}
         const trimmed = userText.trim();
         if (!trimmed) continue;
 
-        if (trimmed.startsWith("/")) {
+        const cliCmd = trimmed.startsWith("@") ? "/" + trimmed.slice(1) : trimmed;
+        if (cliCmd.startsWith("/")) {
           const isWritingGen =
-            /^\/smart-writing\s+(continue|improve|polish|rewrite|edit|expand|shorten)\b/i.test(trimmed) ||
-            /^\/(smart-write|write|story)\s+(continue|improve|polish|rewrite|edit|expand|shorten)\b/i.test(trimmed);
+            /^\/smart-writing\s+(continue|improve|polish|rewrite|edit|expand|shorten)\b/i.test(cliCmd) ||
+            /^\/(smart-write|write|story)\s+(continue|improve|polish|rewrite|edit|expand|shorten)\b/i.test(cliCmd);
           if (isWritingGen) {
             process.stdout.write(`\x1b[32m${this.getBotDisplayName()}:\x1b[0m `);
             let streamed = false;
-            const resp = await this.handleCommand(trimmed, {
+            const resp = await this.handleCommand(cliCmd, {
               stream: true,
               onToken: (token) => {
                 streamed = true;
@@ -1014,7 +1263,7 @@ Candidate Rules:    ${stats.candidateRules}
             if (!streamed) process.stdout.write(resp);
             console.log("\n");
           } else {
-            const resp = await this.handleCommand(trimmed);
+            const resp = await this.handleCommand(cliCmd);
             console.log(`\x1b[33m${resp}\x1b[0m\n`);
           }
           if (!this.isRunning) break;

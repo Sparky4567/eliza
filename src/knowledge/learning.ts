@@ -294,4 +294,162 @@ ${userMessage}`;
     }
     return null;
   }
+
+  /**
+   * Evolution pass: consolidate neuromorphic memory, auto-approve matured
+   * candidate rules, and replay recent conversation turns to keep learning.
+   * Returns a small summary useful for CLI / web / MCP surfaces.
+   */
+  public async evolve(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<{
+    consolidated: number;
+    pruned: number;
+    rulesApproved: number;
+    memoriesExtracted: number;
+    knowledgeExtracted: number;
+    memoriesCreated: number;
+    knowledgeCreated: number;
+    correctionsHandled: number;
+    rulesProposed: number;
+    details: string[];
+  }> {
+    const autoApprove = options.autoApproveCandidates !== false;
+    const replayRecent = options.replayRecent !== false;
+    const details: string[] = [];
+    let consolidated = 0;
+    let pruned = 0;
+    let rulesApproved = 0;
+    let memoriesExtracted = 0;
+    let knowledgeExtracted = 0;
+
+    // 1. Neuromorphic consolidation + pruning (plasticity "sleep" phase).
+    try {
+      const neuro = getNeuromorphicMemory(this.db);
+      const c = neuro.consolidate(true);
+      consolidated = c.consolidated || 0;
+      details.push(`Consolidated ${consolidated} trace(s) (${c.reason}).`);
+      const p = neuro.prune();
+      pruned = p.pruned || 0;
+      details.push(`Pruned ${pruned} trace(s).`);
+    } catch (err: any) {
+      details.push(`Neuromorphic evolution skipped: ${err?.message || err}`);
+    }
+
+    // 2. Auto-approve candidate rules that have matured (continuous learning).
+    if (autoApprove && this.db) {
+      try {
+        const rows = this.db.query<{ id: string; priority: number }>(
+          "SELECT id, priority FROM learned_rules WHERE status = 'candidate'"
+        );
+        for (const r of rows) {
+          if ((r.priority ?? 0) >= 6) {
+            this.ruleRegistry.setRuleStatus(r.id, "approved");
+            rulesApproved++;
+            details.push(`Auto-approved candidate rule ${r.id}.`);
+          }
+        }
+        if (rulesApproved > 0) {
+          try { this.ruleRegistry.loadRules(); } catch {}
+        }
+      } catch (err: any) {
+        details.push(`Candidate rule auto-approval skipped: ${err?.message || err}`);
+      }
+    }
+
+    // 3. Replay recent turns to reinforce extraction (best-effort, never throws).
+    if (replayRecent) {
+      try {
+        const rows = this.db.query<{ role: string; content: string; session_id: string }>(
+          "SELECT role, content, session_id FROM messages ORDER BY created_at DESC LIMIT 12"
+        );
+        // Pair user/assistant turns crudely from the tail.
+        const recent = rows.reverse();
+        let userMsg = "";
+        let assistantMsg = "";
+        for (const r of recent) {
+          if (r.role === "user") {
+            userMsg = r.content;
+          } else if (r.role === "assistant" && userMsg) {
+            assistantMsg = r.content;
+            try {
+              const res = await this.extractWithLLM(userMsg, assistantMsg, "");
+              memoriesExtracted += res.memoriesCreated;
+              knowledgeExtracted += res.knowledgeCreated;
+            } catch {}
+            userMsg = "";
+            assistantMsg = "";
+          }
+        }
+        if (memoriesExtracted || knowledgeExtracted) {
+          details.push(`Replay extracted ${memoriesExtracted} memory(ies), ${knowledgeExtracted} knowledge entry(ies).`);
+        }
+      } catch (err: any) {
+        details.push(`Replay skipped: ${err?.message || err}`);
+      }
+    }
+
+    this.db.logLearningEvent("evolution_pass", {
+      consolidated,
+      pruned,
+      rulesApproved,
+      memoriesExtracted,
+      knowledgeExtracted,
+    });
+
+    return {
+      consolidated,
+      pruned,
+      rulesApproved,
+      memoriesExtracted,
+      knowledgeExtracted,
+      memoriesCreated: memoriesExtracted,
+      knowledgeCreated: knowledgeExtracted,
+      correctionsHandled: 0,
+      rulesProposed: rulesApproved,
+      details,
+    };
+  }
+
+  /** Alias kept for "continuous learning" naming. */
+  public async learnContinuously(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<{
+    consolidated: number;
+    pruned: number;
+    rulesApproved: number;
+    memoriesExtracted: number;
+    knowledgeExtracted: number;
+    memoriesCreated: number;
+    knowledgeCreated: number;
+    correctionsHandled: number;
+    rulesProposed: number;
+    details: string[];
+  }> {
+    return this.evolve(options);
+  }
+
+  /** Alias. */
+  public async learn(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<{
+    consolidated: number;
+    pruned: number;
+    rulesApproved: number;
+    memoriesExtracted: number;
+    knowledgeExtracted: number;
+    memoriesCreated: number;
+    knowledgeCreated: number;
+    correctionsHandled: number;
+    rulesProposed: number;
+    details: string[];
+  }> {
+    return this.evolve(options);
+  }
+
+  public async evolveMemory(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<LearningPipeline["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async continuousLearning(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<LearningPipeline["evolve"]>> {
+    return this.evolve(options);
+  }
+
+  public async learnFromHistory(options: { autoApproveCandidates?: boolean; replayRecent?: boolean } = {}): Promise<ReturnType<LearningPipeline["evolve"]>> {
+    return this.evolve(options);
+  }
 }

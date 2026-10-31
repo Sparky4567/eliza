@@ -113,3 +113,5 @@ Format:
 Summary: <summary>
 Keywords: <kw1, kw2, ...>
 `.trim();
+
+export const DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT;

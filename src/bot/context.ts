@@ -21,11 +21,87 @@ export interface BuiltContext {
 export class ContextBuilder {
   private memoryRetriever: MemoryRetriever;
   private knowledgeRetriever: KnowledgeRetriever;
+  private systemPromptTemplate: string;
 
-  constructor(memoryRetriever: MemoryRetriever, knowledgeRetriever: KnowledgeRetriever) {
+  constructor(
+    memoryRetriever: MemoryRetriever,
+    knowledgeRetriever: KnowledgeRetriever,
+    systemPromptTemplate?: string | {
+      systemPrompt?: string;
+      systemTemplate?: string;
+      persona?: string;
+      template?: string;
+      prompt?: string;
+    }
+  ) {
     this.memoryRetriever = memoryRetriever;
     this.knowledgeRetriever = knowledgeRetriever;
+    let resolved = SYSTEM_PROMPT;
+    if (typeof systemPromptTemplate === "string") {
+      resolved = systemPromptTemplate;
+    } else if (systemPromptTemplate && typeof systemPromptTemplate === "object") {
+      resolved =
+        systemPromptTemplate.systemPrompt ||
+        systemPromptTemplate.systemTemplate ||
+        systemPromptTemplate.persona ||
+        systemPromptTemplate.template ||
+        systemPromptTemplate.prompt ||
+        SYSTEM_PROMPT;
+    }
+    this.systemPromptTemplate = resolved && resolved.trim() ? resolved : SYSTEM_PROMPT;
   }
+
+  public getSystemPrompt(): string {
+    return this.systemPromptTemplate;
+  }
+
+  public getSystemTemplate(): string {
+    return this.getSystemPrompt();
+  }
+
+  public getPersona(): string {
+    return this.getSystemPrompt();
+  }
+
+  public setSystemPrompt(template: string): string {
+    const clean = (template ?? "").trim();
+    if (!clean) throw new Error("system prompt must not be empty");
+    this.systemPromptTemplate = clean;
+    return this.systemPromptTemplate;
+  }
+
+  public setSystemTemplate(template: string): string {
+    return this.setSystemPrompt(template);
+  }
+
+  public setPersona(template: string): string {
+    return this.setSystemPrompt(template);
+  }
+
+  public resetSystemPrompt(): string {
+    this.systemPromptTemplate = SYSTEM_PROMPT;
+    return this.systemPromptTemplate;
+  }
+
+  public resetSystemTemplate(): string {
+    return this.resetSystemPrompt();
+  }
+
+  public resetPersona(): string {
+    return this.resetSystemPrompt();
+  }
+
+  public getSystemPromptTemplate(): string { return this.getSystemPrompt(); }
+  public setSystemPromptTemplate(template: string): string { return this.setSystemPrompt(template); }
+  public resetSystemPromptTemplate(): string { return this.resetSystemPrompt(); }
+
+  public getPrompt(): string { return this.getSystemPrompt(); }
+  public setPrompt(template: string): string { return this.setSystemPrompt(template); }
+  public resetPrompt(): string { return this.resetSystemPrompt(); }
+
+  public getTemplate(): string { return this.getSystemPrompt(); }
+  public setTemplate(template: string): string { return this.setSystemPrompt(template); }
+  public resetTemplate(): string { return this.resetSystemPrompt(); }
 
   public build(
     userMessage: string,
@@ -46,7 +122,7 @@ export class ContextBuilder {
     const slicedHistory = recentHistory.slice(-maxHistoryTurns);
 
     // 4. Build System Context section
-    let systemContext = SYSTEM_PROMPT;
+    let systemContext = this.systemPromptTemplate;
 
     if (retrievedMemories.length > 0) {
       systemContext += "\n\n=== RELEVANT PERSISTENT MEMORIES ===";
