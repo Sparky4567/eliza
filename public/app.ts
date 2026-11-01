@@ -15,6 +15,31 @@ const logEl = $("log"), statusEl = $("status"), statusText = $("statusText"),
 let ws: WebSocket | null = null;
 let busy = false;
 
+// ---- Preferences (font size + voice) ----
+const PREF_KEY = "eliza-prefs";
+const prefs = Object.assign(
+  { fontScale: 1, readAloud: false, confirmSpeech: true },
+  (() => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || "{}"); } catch { return {}; } })()
+);
+function savePrefs() {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* private mode */ }
+}
+function applyPrefs() {
+  document.documentElement.style.setProperty("--font-scale", String(prefs.fontScale));
+  const fs = document.getElementById("fontScale") as HTMLInputElement | null;
+  if (fs) fs.value = String(prefs.fontScale);
+  const ra = document.getElementById("readAloud") as HTMLInputElement | null;
+  if (ra) ra.checked = !!prefs.readAloud;
+  const cs = document.getElementById("confirmSpeech") as HTMLInputElement | null;
+  if (cs) cs.checked = !!prefs.confirmSpeech;
+}
+function voiceStatus(text: string, cls = "") {
+  const el = document.getElementById("voiceStatus");
+  if (!el) return;
+  el.textContent = text;
+  el.className = `ch-msg ${cls}`;
+}
+
 function renderAiBody(body: HTMLElement, raw: string) {
   body.dataset.raw = raw;
   body.innerHTML = renderMarkdown(raw);
@@ -118,6 +143,112 @@ function renderTrace(trace: any) {
     (ev ? `<div>score <span class="k">${esc(String(ev.score))}</span> · hallucination <span class="k">${esc(String(ev.potentialHallucination))}</span></div><div>${esc(String(ev.notes ?? ""))}</div>` : "");
 }
 
+// ---- Voice output (TTS) ----
+function speak(text: string) {
+  const clean = String(text ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[*#_`~>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 600);
+  if (!clean || !prefs.readAloud || !window.speechSynthesis) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(clean);
+    window.speechSynthesis.speak(u);
+  } catch { /* ignore */ }
+}
+function stopSpeech() {
+  try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+}
+
+// ---- Voice input (STT) ----
+const SpeechRec: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+let recognition: any = null;
+let shouldListen = false;
+let finalTranscript = "";
+let liveTranscript = "";
+let silenceTimer: number | null = null;
+function clearSilence() { if (silenceTimer !== null) { clearTimeout(silenceTimer); silenceTimer = null; } }
+function updateMicState() {
+  const btn = document.getElementById("micBtn") as HTMLButtonElement | null;
+  if (btn) btn.textContent = shouldListen ? "⏹ Stop listening" : "🎤 Voice input";
+}
+function startListening() {
+  if (!SpeechRec) {
+    voiceStatus("Speech recognition is not supported in this browser.", "err");
+    return;
+  }
+  stopSpeech();
+  const rec = new SpeechRec();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = navigator.language || "en-US";
+  finalTranscript = "";
+  recognition = rec;
+  rec.onresult = (ev: any) => {
+    let interim = "";
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const t = ev.results[i][0]?.transcript ?? "";
+      if (ev.results[i].isFinal) finalTranscript += t;
+      else interim += t;
+    }
+    liveTranscript = (finalTranscript + interim).trim();
+    if (liveTranscript) {
+      textIn.value = liveTranscript;
+    }
+    clearSilence();
+    if (liveTranscript) {
+      silenceTimer = window.setTimeout(() => {
+        const content = liveTranscript.trim();
+        finalTranscript = "";
+        liveTranscript = "";
+        if (!content) return;
+        try { rec.onresult = null; rec.stop(); } catch { /* ignore */ }
+        if (prefs.confirmSpeech) {
+          textIn.value = content;
+          shouldListen = false;
+          recognition = null;
+          updateMicState();
+          voiceStatus("Recognized speech placed in composer — review and send.", "ok");
+        } else {
+          textIn.value = content;
+          sendCurrent();
+        }
+      }, 1500);
+    }
+  };
+  rec.onerror = (ev: any) => {
+    if (ev?.error === "not-allowed") {
+      voiceStatus("Microphone permission denied.", "err");
+      stopLive();
+    }
+  };
+  rec.onend = () => {
+    recognition = null;
+    if (shouldListen) startListening();
+    else updateMicState();
+  };
+  try {
+    rec.start();
+    voiceStatus("Listening…", "ok");
+  } catch {
+    recognition = null;
+    updateMicState();
+  }
+}
+function stopLive() {
+  shouldListen = false;
+  liveTranscript = "";
+  finalTranscript = "";
+  clearSilence();
+  try { recognition?.abort(); } catch { /* ignore */ }
+  recognition = null;
+  stopSpeech();
+  updateMicState();
+  voiceStatus("Voice input stopped.", "");
+}
+
 function connect() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -164,8 +295,10 @@ function connect() {
           const raw = (body.dataset.raw ?? "").trim() ? body.dataset.raw! : text;
           renderAiBody(body, raw);
           logEl.scrollTop = logEl.scrollHeight;
+          if (prefs.readAloud) speak(raw);
         } else {
           log("eliza 🤖", text, "ai", { markdown: true });
+          if (prefs.readAloud) speak(text);
         }
         streamingAiDiv = null;
         renderTrace(m.trace);
@@ -178,6 +311,7 @@ function connect() {
         break;
       case "interrupted":
         busy = false;
+        stopSpeech();
         if (streamingAiDiv) {
           streamingAiDiv.querySelector(".body")!.textContent += " ⏹";
           streamingAiDiv = null;
@@ -186,6 +320,7 @@ function connect() {
         break;
       case "error":
         busy = false;
+        stopSpeech();
         log("system", String(m.message), "sys");
         streamingAiDiv = null;
         setStatus("live", "listening…");
@@ -210,6 +345,7 @@ async function sendRest(text: string) {
     const isCmd = text.startsWith("/");
     log(isCmd ? "command" : "eliza 🤖", String(j.reply ?? ""), isCmd ? "sys" : "ai",
       isCmd ? {} : { markdown: true });
+    if (!isCmd && prefs.readAloud) speak(String(j.reply ?? ""));
     renderTrace(j.trace);
   } catch (e: any) {
     log("system", `send failed: ${e?.message ?? e}`, "sys");
@@ -245,6 +381,7 @@ textIn.onkeydown = (e) => {
 };
 stopBtn.onclick = () => {
   ws?.send(JSON.stringify({ type: "stop" }));
+  stopSpeech();
   busy = false;
   if (streamingAiDiv) {
     streamingAiDiv.querySelector(".body")!.textContent += " ⏹";
@@ -612,6 +749,41 @@ async function updateWaStatus() {
 
 void refreshChannelsSummary();
 setInterval(() => { void updateWaStatus(); }, 5000);
+
+// ---- Preferences wiring ----
+applyPrefs();
+const fontScaleEl = document.getElementById("fontScale") as HTMLInputElement | null;
+fontScaleEl?.addEventListener("input", () => {
+  prefs.fontScale = Number(fontScaleEl.value) || 1;
+  savePrefs();
+  applyPrefs();
+});
+const readAloudEl = document.getElementById("readAloud") as HTMLInputElement | null;
+readAloudEl?.addEventListener("change", () => {
+  prefs.readAloud = !!readAloudEl.checked;
+  savePrefs();
+  applyPrefs();
+  if (!prefs.readAloud) stopSpeech();
+});
+const confirmSpeechEl = document.getElementById("confirmSpeech") as HTMLInputElement | null;
+confirmSpeechEl?.addEventListener("change", () => {
+  prefs.confirmSpeech = !!confirmSpeechEl.checked;
+  savePrefs();
+  applyPrefs();
+});
+const micBtnEl = document.getElementById("micBtn") as HTMLButtonElement | null;
+if (micBtnEl) {
+  micBtnEl.onclick = () => {
+    if (shouldListen) { stopLive(); return; }
+    if (!SpeechRec) { voiceStatus("Speech recognition not supported in this browser.", "err"); return; }
+    shouldListen = true;
+    liveTranscript = "";
+    updateMicState();
+    startListening();
+  };
+}
+const stopSpeechBtn = document.getElementById("stopSpeechBtn") as HTMLButtonElement | null;
+if (stopSpeechBtn) stopSpeechBtn.onclick = () => stopSpeech();
 
 connect();
 log("eliza 🤖", "Hey — I'm ELIZA-AI in the browser. Type below, or try `/help`, `/stats`, `/trace`.", "ai", { markdown: true });
